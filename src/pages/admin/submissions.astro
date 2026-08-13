@@ -1,0 +1,490 @@
+---
+import Base from '../../layouts/Base.astro';
+import { listPendingForReview, getQueueCounts, listRecentlyReviewed } from '../../lib/admin';
+import { approveSubmission, rejectSubmission } from '../../lib/submissions';
+import { formatDate } from '../../lib/site';
+
+/**
+ * Moderation queue. Access is gated by Basic auth in src/middleware.ts.
+ *
+ * Approve/reject post back to this page and call the same functions the n8n
+ * callback uses, so both paths share one implementation — including the
+ * transaction and the row lock that stop a double approval.
+ */
+let flash: { kind: 'ok' | 'err'; message: string } | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const id = String(form.get('id') ?? '');
+  const action = String(form.get('action') ?? '');
+  const note = String(form.get('note') ?? '').trim() || null;
+  // Basic auth already identified them; record who acted.
+  const reviewer = process.env.ADMIN_USER ?? 'admin';
+
+  if (!id) {
+    flash = { kind: 'err', message: 'Missing submission id.' };
+  } else if (action === 'approve' || action === 'reject') {
+    const outcome =
+      action === 'approve'
+        ? await approveSubmission(id, reviewer)
+        : await rejectSubmission(id, reviewer, note);
+
+    if (outcome.ok) {
+      flash =
+        action === 'approve'
+          ? {
+              kind: 'ok',
+              message: `Approved — ${outcome.kind === 'update' ? 'updated' : 'created'} ${outcome.carPublicRef}.`,
+            }
+          : { kind: 'ok', message: 'Rejected.' };
+    } else {
+      const messages = {
+        not_found: 'That submission no longer exists.',
+        already_reviewed: 'Already reviewed by someone else — nothing changed.',
+        conflict: 'That chassis number was registered while this sat in the queue.',
+        empty: 'That correction proposes no changes, so there is nothing to apply.',
+      } as const;
+      flash = { kind: 'err', message: messages[outcome.reason] };
+    }
+  } else {
+    flash = { kind: 'err', message: 'Unknown action.' };
+  }
+}
+
+const [pending, counts, recent] = await Promise.all([
+  listPendingForReview(),
+  getQueueCounts(),
+  listRecentlyReviewed(),
+]);
+---
+
+<Base title="Moderation queue — Spitplate">
+  <section class="admin-head">
+    <div class="wrap">
+      <span class="section-tag">Moderation</span>
+      <h1>{counts.pending === 0 ? 'Queue is clear.' : `${counts.pending} waiting for review.`}</h1>
+      <p class="counts mono">
+        {counts.approvedToday} approved · {counts.rejectedToday} rejected · last 24 hours
+      </p>
+    </div>
+  </section>
+
+  <section class="section admin-body">
+    <div class="wrap">
+      {flash && <div class:list={['flash', flash.kind]} role="status">{flash.message}</div>}
+
+      {
+        pending.length === 0 ? (
+          <div class="clear-state">
+            <p>Nothing pending. New submissions land here and post to Discord.</p>
+          </div>
+        ) : (
+          pending.map((item) => (
+            <article class="review">
+              <header class="review-head">
+                <div>
+                  <span class:list={['kind', item.kind]}>
+                    {item.kind === 'update' ? 'Correction' : 'New car'}
+                  </span>
+                  <h2>{item.payload.chassisNumber}</h2>
+                  <p class="meta mono">
+                    Filed {formatDate(item.createdAt)}
+                    {item.targetPublicRef && (
+                      <>
+                        {' · against '}
+                        <a href={`/registry/${item.targetPublicRef}`}>{item.targetPublicRef}</a>
+                      </>
+                    )}
+                    {item.kind === 'update' && ` · ${item.changedCount} field${item.changedCount === 1 ? '' : 's'} changed`}
+                  </p>
+                </div>
+              </header>
+
+              {(item.submitterName || item.submitterEmail || item.submitterNote) && (
+                <div class="submitter">
+                  <h3>From</h3>
+                  <p>
+                    {item.submitterName ?? 'Anonymous'}
+                    {item.submitterEmail && <span class="mono"> · {item.submitterEmail}</span>}
+                  </p>
+                  {item.submitterNote && <blockquote>{item.submitterNote}</blockquote>}
+                </div>
+              )}
+
+              <div class="diff-scroll">
+                <table class="diff">
+                  <thead>
+                    <tr>
+                      <th scope="col">Field</th>
+                      {item.kind === 'update' && <th scope="col">Current</th>}
+                      <th scope="col">{item.kind === 'update' ? 'Proposed' : 'Value'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {item.diff
+                      .filter((row) => (item.kind === 'update' ? row.inProposal : row.proposed !== null))
+                      .map((row) => (
+                        <tr class={row.changed ? 'is-changed' : ''}>
+                          <th scope="row">
+                            {row.label}
+                            {row.isPrivate && <span class="private-tag">private</span>}
+                          </th>
+                          {item.kind === 'update' && <td class="old">{row.current ?? '—'}</td>}
+                          <td class="new">{row.proposed ?? '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {item.kind === 'update' && (
+                <p class="merge-note mono">
+                  Only these fields are written. Everything else on {item.targetPublicRef} keeps its
+                  current value.
+                </p>
+              )}
+
+              <div class="actions">
+                <form method="post">
+                  <input type="hidden" name="id" value={item.id} />
+                  <input type="hidden" name="action" value="approve" />
+                  <button type="submit" class="btn approve">
+                    {item.kind === 'update' ? 'Apply correction' : 'Approve & publish'}
+                  </button>
+                </form>
+
+                <form method="post" class="reject-form">
+                  <input type="hidden" name="id" value={item.id} />
+                  <input type="hidden" name="action" value="reject" />
+                  <input type="text" name="note" placeholder="Reason (optional)" aria-label="Rejection reason" />
+                  <button type="submit" class="btn ghost">Reject</button>
+                </form>
+              </div>
+            </article>
+          ))
+        )
+      }
+
+      {
+        recent.length > 0 && (
+          <section class="recent">
+            <h2 class="recent-title">Recently reviewed</h2>
+            <ul>
+              {recent.map((r) => (
+                <li>
+                  <span class:list={['dot', r.status]} aria-hidden="true" />
+                  <span class="mono chassis">{r.chassisNumber ?? '—'}</span>
+                  <span class="what">
+                    {r.status === 'approved' ? 'approved' : 'rejected'}
+                    {r.resultingPublicRef && (
+                      <>
+                        {' → '}
+                        <a href={`/registry/${r.resultingPublicRef}`}>{r.resultingPublicRef}</a>
+                      </>
+                    )}
+                    {r.reviewNote && <em> — {r.reviewNote}</em>}
+                  </span>
+                  <span class="when mono">
+                    {formatDate(r.reviewedAt)}
+                    {r.reviewedBy ? ` · ${r.reviewedBy}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      }
+    </div>
+  </section>
+</Base>
+
+<style>
+  .admin-head {
+    background: var(--ink);
+    color: var(--parchment);
+    padding: 48px 0 40px;
+  }
+
+  .admin-head .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .admin-head h1 {
+    font-size: clamp(28px, 4vw, 44px);
+    color: var(--parchment);
+    line-height: 1.02;
+  }
+
+  .counts {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    margin-top: 14px;
+  }
+
+  .admin-body {
+    padding: 36px 0 80px;
+  }
+
+  .flash {
+    border-radius: 3px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 15px;
+  }
+
+  .flash.ok {
+    border: 1px solid var(--racing-green-3);
+    background: rgba(30, 77, 59, 0.1);
+  }
+
+  .flash.err {
+    border: 1px solid var(--signal-red);
+    background: rgba(165, 56, 42, 0.08);
+  }
+
+  .clear-state {
+    border: 1px dashed var(--line);
+    border-radius: 3px;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--ink-soft);
+  }
+
+  .clear-state p {
+    margin: 0;
+  }
+
+  .review {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--card);
+    padding: 24px;
+    margin-bottom: 22px;
+  }
+
+  .review-head h2 {
+    font-size: 28px;
+    margin: 8px 0 6px;
+  }
+
+  .kind {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: rgba(30, 77, 59, 0.14);
+    color: var(--racing-green-2);
+  }
+
+  .kind.update {
+    background: rgba(165, 56, 42, 0.12);
+    color: var(--signal-red);
+  }
+
+  .meta {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+
+  .submitter {
+    margin: 18px 0;
+    padding: 14px 16px;
+    background: rgba(20, 20, 15, 0.03);
+    border-radius: 3px;
+  }
+
+  .submitter h3 {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .submitter p {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .submitter blockquote {
+    margin: 8px 0 0;
+    padding-left: 12px;
+    border-left: 2px solid var(--brass);
+    font-size: 15px;
+    color: var(--ink-soft);
+  }
+
+  .diff-scroll {
+    overflow-x: auto;
+    position: relative;
+    margin: 18px 0;
+  }
+
+  table.diff {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+
+  table.diff th,
+  table.diff td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+
+  table.diff thead th {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--brass);
+  }
+
+  table.diff tbody th {
+    font-weight: 400;
+    color: var(--ink-mute);
+    white-space: nowrap;
+    width: 170px;
+  }
+
+  .private-tag {
+    display: inline-block;
+    margin-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--signal-red);
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    padding: 1px 4px;
+  }
+
+  .is-changed .new {
+    background: rgba(214, 168, 98, 0.18);
+    font-weight: 600;
+  }
+
+  .is-changed .old {
+    color: var(--ink-mute);
+    text-decoration: line-through;
+  }
+
+  .merge-note {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: -6px 0 16px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding-top: 6px;
+  }
+
+  .actions form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .reject-form input {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: #fff;
+    min-width: 190px;
+  }
+
+  .btn.approve {
+    background: var(--racing-green);
+    border-color: var(--racing-green);
+  }
+
+  .btn.approve:hover {
+    background: var(--racing-green-3);
+  }
+
+  .recent {
+    margin-top: 48px;
+    border-top: 1px solid var(--line);
+    padding-top: 24px;
+  }
+
+  .recent-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+
+  .recent ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .recent li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex: none;
+    background: var(--ink-mute);
+  }
+
+  .dot.approved {
+    background: var(--racing-green-3);
+  }
+
+  .dot.rejected {
+    background: var(--signal-red);
+  }
+
+  .recent .chassis {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .recent .what {
+    color: var(--ink-soft);
+  }
+
+  .recent .when {
+    margin-left: auto;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+</style>

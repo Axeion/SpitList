@@ -99,7 +99,55 @@ export async function listPending(limit = 50): Promise<PendingSubmission[]> {
   }));
 }
 
-/** Maps the validated payload onto `cars` columns. */
+/** payload key -> cars column, for the fields a submission may set. */
+const COLUMN_OF: Record<string, string> = {
+  chassisNumber: 'chassis_number',
+  chassisNormalized: 'chassis_normalized',
+  chassisPrefix: 'chassis_prefix',
+  chassisSerial: 'chassis_serial',
+  chassisSuffix: 'chassis_suffix',
+  eraCode: 'era_code',
+  seriesId: 'series_id',
+  modelYear: 'model_year',
+  buildYear: 'build_year',
+  firstRegisteredOn: 'first_registered_on',
+  engineCc: 'engine_cc',
+  engineNumber: 'engine_number',
+  colour: 'colour',
+  colourCode: 'colour_code',
+  commissionPlatePresent: 'commission_plate_present',
+  isModified: 'is_modified',
+  modificationNotes: 'modification_notes',
+  notes: 'notes',
+  ownerName: 'owner_name',
+  ownerCountry: 'owner_country',
+  ownerRegion: 'owner_region',
+  ownerCity: 'owner_city',
+  showOwnerName: 'show_owner_name',
+  showLocation: 'show_location',
+};
+
+/**
+ * Columns to write for a correction: only the fields the submitter actually
+ * filled in.
+ *
+ * Writing the whole payload would blank every field they left empty — someone
+ * fixing one car's colour would wipe its year, engine, series and paint code.
+ * Older submissions predate `provided`; those fall back to the full payload,
+ * which is the behaviour they were reviewed under.
+ */
+export function toUpdateColumns(payload: SubmissionPayload): Record<string, unknown> {
+  if (!Array.isArray(payload.provided)) return toCarColumns(payload);
+
+  const columns: Record<string, unknown> = {};
+  for (const key of payload.provided) {
+    const column = COLUMN_OF[key];
+    if (column) columns[column] = (payload as Record<string, any>)[key];
+  }
+  return columns;
+}
+
+/** Maps the whole validated payload onto `cars` columns. Used for new cars. */
 function toCarColumns(payload: SubmissionPayload) {
   return {
     era_code: payload.eraCode,
@@ -131,7 +179,7 @@ function toCarColumns(payload: SubmissionPayload) {
 
 export type ReviewOutcome =
   | { ok: true; carPublicRef: string; kind: 'create' | 'update' }
-  | { ok: false; reason: 'not_found' | 'already_reviewed' | 'conflict' };
+  | { ok: false; reason: 'not_found' | 'already_reviewed' | 'conflict' | 'empty' };
 
 /**
  * Approves a submission and writes it through to `cars`, in one transaction.
@@ -159,11 +207,16 @@ export async function approveSubmission(
         return { ok: false, reason: 'already_reviewed' } as const;
       }
 
-      const columns = toCarColumns(submission.payload);
       let carId: string;
       let publicRef: string;
 
       if (submission.kind === 'update' && submission.target_car_id) {
+        // Merge, don't replace — see toUpdateColumns.
+        const columns = toUpdateColumns(submission.payload);
+        if (Object.keys(columns).length === 0) {
+          return { ok: false, reason: 'empty' } as const;
+        }
+
         const [updated] = await tx`
           update cars set ${tx(columns)}
           where id = ${submission.target_car_id}
@@ -173,7 +226,9 @@ export async function approveSubmission(
         carId = updated.id;
         publicRef = updated.public_ref;
       } else {
-        // public_ref comes from the sequence default.
+        // A new car takes the whole payload; unfilled columns fall to their
+        // defaults, which is what they mean on a create.
+        const columns = toCarColumns(submission.payload);
         const [created] = await tx`
           insert into cars ${tx({ ...columns, source: 'submission' })}
           returning id, public_ref

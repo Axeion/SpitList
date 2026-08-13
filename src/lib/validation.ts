@@ -13,6 +13,21 @@ import { parseChassis } from './chassis';
  */
 
 export interface SubmissionPayload {
+  /**
+   * Which fields the submitter actually filled in.
+   *
+   * This is what makes a correction a *correction*. A payload is a snapshot of
+   * one form, and most of that form is blank — someone fixing a car's colour
+   * leaves twenty other fields empty. Applying the whole snapshot to an
+   * existing car would blank every one of them, so on approval of an update
+   * only the keys listed here are written. Everything else keeps its value.
+   *
+   * An unticked checkbox counts as *not provided*, not as false. That means a
+   * correction cannot flip a boolean back to false through the form — a real
+   * limitation, and the safe direction to err in. It also means a third party
+   * correcting a chassis number can never quietly un-publish the owner's name.
+   */
+  provided: string[];
   chassisNumber: string;
   chassisNormalized: string;
   chassisPrefix: string | null;
@@ -174,9 +189,58 @@ export function validateSubmission(
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
+  // Payload key -> form field. Checkboxes count as provided only when ticked;
+  // the browser sends nothing at all for an unticked box, which is exactly the
+  // "no opinion" we want to preserve.
+  const FIELD_SOURCES: [string, string, 'value' | 'checkbox'][] = [
+    ['chassisNumber', 'chassis_number', 'value'],
+    ['eraCode', 'era_code', 'value'],
+    ['seriesId', 'series_id', 'value'],
+    ['modelYear', 'model_year', 'value'],
+    ['buildYear', 'build_year', 'value'],
+    ['firstRegisteredOn', 'first_registered_on', 'value'],
+    ['engineCc', 'engine_cc', 'value'],
+    ['engineNumber', 'engine_number', 'value'],
+    ['colour', 'colour', 'value'],
+    ['colourCode', 'colour_code', 'value'],
+    ['commissionPlatePresent', 'plate_missing', 'checkbox'],
+    ['isModified', 'is_modified', 'checkbox'],
+    ['modificationNotes', 'modification_notes', 'value'],
+    ['notes', 'notes', 'value'],
+    ['ownerName', 'owner_name', 'value'],
+    ['ownerCountry', 'owner_country', 'value'],
+    ['ownerRegion', 'owner_region', 'value'],
+    ['ownerCity', 'owner_city', 'value'],
+    ['showOwnerName', 'show_owner_name', 'checkbox'],
+    ['showLocation', 'show_location', 'checkbox'],
+  ];
+
+  const provided: string[] = [];
+  for (const [key, field, mode] of FIELD_SOURCES) {
+    const raw = form.get(field);
+    const given =
+      mode === 'checkbox'
+        ? checkbox(raw)
+        : typeof raw === 'string' && raw.trim() !== '';
+    if (given) provided.push(key);
+  }
+
+  // Series is dropped when it contradicts the era, so it must not stay marked
+  // as provided — otherwise approval would null out a correct existing series.
+  if (seriesId === null) {
+    const at = provided.indexOf('seriesId');
+    if (at !== -1) provided.splice(at, 1);
+  }
+
+  // The parsed parts travel with the number they came from.
+  if (provided.includes('chassisNumber')) {
+    provided.push('chassisNormalized', 'chassisPrefix', 'chassisSerial', 'chassisSuffix');
+  }
+
   return {
     ok: true,
     payload: {
+      provided,
       chassisNumber: chassisRaw!,
       chassisNormalized: parsed.normalized,
       chassisPrefix: parsed.prefix,

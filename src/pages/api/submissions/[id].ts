@@ -77,5 +77,10 @@ export const POST: APIRoute = async ({ params, request }) => {
         { error: 'That chassis number was registered while this sat in the queue.' },
         409
       );
+    case 'empty':
+      return json(
+        { error: 'That correction proposes no changes; nothing to apply.' },
+        422
+      );
   }
 };

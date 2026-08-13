@@ -15,12 +15,16 @@ export function clientIp(request: Request, fallback?: string): string | null {
   return fallback ?? null;
 }
 
-/** Constant-time-ish comparison, to avoid leaking token length by timing. */
+import { createHash, timingSafeEqual } from 'node:crypto';
+
+/**
+ * Constant-time secret comparison.
+ *
+ * Both sides are hashed first so the buffers are always 32 bytes: comparing the
+ * raw strings would bail out early on a length mismatch and leak the secret's
+ * length through timing.
+ */
 export function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+  const digest = (value: string) => createHash('sha256').update(value, 'utf8').digest();
+  return timingSafeEqual(digest(a), digest(b));
 }
