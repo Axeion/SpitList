@@ -1,3 +1,6 @@
+# NOT in use — production runs on Railway, which terminates TLS and routes
+# to the service itself. This is the self-hosted VPS fallback only.
+#
 # Native Caddy on the VPS, in front of the app container.
 # Copy the relevant block into /etc/caddy/Caddyfile.
 

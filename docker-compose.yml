@@ -1,9 +1,13 @@
-# Self-hosted shape: app + Postgres on the VPS, native Caddy in front.
+# NOT the deployment target — production runs on Railway (see railway.json).
 #
-# Neither service publishes a port to the internet. Caddy reaches the app over
-# 127.0.0.1:4321 on the host; Postgres is only reachable from the compose
-# network. If you move to Neon, delete the `db` service and the `depends_on`
-# block, and point DATABASE_URL at the Neon connection string.
+# This file is kept for two things:
+#   1. Local development: `docker compose up -d db` for a Postgres instance
+#      without installing one.
+#   2. The self-hosted VPS fallback: app + Postgres behind native Caddy.
+#
+# Neither service publishes a port to the internet. Caddy would reach the app
+# over 127.0.0.1:4321 on the host; Postgres is only reachable from the compose
+# network.
 
 services:
   app:

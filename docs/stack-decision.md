@@ -3,9 +3,16 @@
 Status: proposed, implemented for the first slice
 Date: 2026-08-13
 
+> **Amendment, 2026-08-13 — hosting.** The handoff specified the Hostinger
+> KVM4 + Docker + native Caddy pattern. Superseded by the project owner:
+> Railway is where this deploys, alongside existing Railway projects. The
+> application stack below is unchanged — it was chosen to be host-agnostic, and
+> the same Dockerfile serves both. See *Deployment shape*.
+
 ## Constraints (from handoff)
 
-- Hostinger KVM4 VPS, Docker, native Caddy reverse proxy in front
+- ~~Hostinger KVM4 VPS, Docker, native Caddy reverse proxy in front~~
+  → Railway (see amendment above)
 - PostgreSQL, small dataset (tens of thousands of rows at the absolute ceiling)
 - n8n for notifications / moderation routing
 - "Keep it simple — server-rendered or lightweight SPA is fine. Propose an
@@ -61,18 +68,35 @@ Total client JS is a single inline module of roughly 40 lines.
 ## Deployment shape
 
 ```
-Caddy (native, host)  →  :4321 spitplate app container
-                         :5432 postgres container (or Neon)
-                         n8n (existing host instance) ← webhook on new submission
+Railway edge (TLS, routing)  →  spitplate service   (Dockerfile, $PORT injected)
+                                Postgres service    (private network, IPv6)
+                                n8n ← webhook on new submission
 ```
 
-`docker-compose.yml` runs app + Postgres for a self-hosted VPS. Pointing
-`DATABASE_URL` at Neon instead is a one-line change; the compose `db` service
-can then be dropped. At this data size self-hosted Postgres on the KVM4 is
-simpler and cheaper — Neon earns its keep only if we want branching for
-staging.
+Railway, configured by `railway.json`: Dockerfile builder, healthcheck on
+`/health`, and `npm run db:migrate` as a pre-deploy step so schema changes land
+before the new version takes traffic. `DATABASE_URL` comes from the Postgres
+service as a reference variable.
 
-`Caddyfile.example` has the reverse-proxy block.
+Two things this pins down:
+
+- **The image is Debian-slim, not Alpine.** Railway's private networking is
+  IPv6-only and musl-based images need an extra opt-in flag to resolve
+  `*.railway.internal`. glibc removes the failure mode instead of documenting a
+  workaround for it.
+- **Seeding is not part of the deploy.** `db:seed` generates synthetic cars.
+  Migrations run automatically; seeding never does.
+
+Managed Postgres also settles the Neon question — no reason to add a second
+provider for a database this small.
+
+### Fallback: self-hosted VPS
+
+`docker-compose.yml` and `Caddyfile.example` describe the original VPS shape.
+They are kept, not deleted: the same Dockerfile drives both, and compose is
+still the quickest way to bring up Postgres locally. They are **not** the
+current deployment target — nothing routes through Caddy on Railway, which
+terminates TLS itself.
 
 ## Open, deliberately deferred
 

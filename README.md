@@ -85,37 +85,51 @@ version either way.
 It's the healthcheck for both paths — a healthy response means "can serve real
 data", not just "process is up".
 
-### Railway
+### Railway (current target)
 
 ```bash
-railway init
+railway init                    # or `railway link` to use an existing project
 railway add --database postgres
 railway up
 ```
 
-`railway.json` sets the Dockerfile builder, points the healthcheck at `/health`,
-and runs `npm run db:migrate` as a pre-deploy step so schema changes land before
-the new version takes traffic. Set `DATABASE_URL` on the app service to the
-reference variable `${{Postgres.DATABASE_URL}}`; Railway injects `PORT` and
-terminates TLS, so `docker-compose.yml` and `Caddyfile.example` are unused here.
+Then set `DATABASE_URL` on the app service to the Postgres service's reference
+variable — `${{Postgres.DATABASE_URL}}`, substituting the service's actual name
+if it isn't `Postgres`. Give Spitplate its own Postgres service rather than
+sharing one with another project; the registry owns its schema and its
+migrations run automatically on deploy.
 
-Note the image is Debian-slim, not Alpine, deliberately: Railway's private
-networking is IPv6-only and musl-based images need an extra opt-in flag to
-resolve `*.railway.internal`. glibc avoids that failure mode entirely.
+`railway.json` handles the rest: Dockerfile builder, healthcheck on `/health`,
+and `npm run db:migrate` as a pre-deploy step so schema changes land before the
+new version takes traffic. Railway injects `PORT` and terminates TLS.
 
-Seeding is *not* part of the deploy. `db:seed` generates synthetic cars and
-should never run against production.
+Two things worth knowing before changing them:
 
-### VPS (Docker + native Caddy)
+- The image is **Debian-slim, not Alpine**, deliberately. Railway's private
+  networking is IPv6-only and musl-based images need an extra opt-in flag to
+  resolve `*.railway.internal`.
+- **Seeding is not part of the deploy.** `db:seed` generates synthetic cars and
+  must never run against production. Only `db:migrate` is wired in.
+
+### Local Postgres via compose
+
+The quickest way to get a database without installing one:
+
+```bash
+POSTGRES_PASSWORD=spitplate docker compose up -d db
+npm run db:setup
+```
+
+### Self-hosted VPS (fallback, not the current target)
+
+`docker-compose.yml` brings up app + Postgres together, and `Caddyfile.example`
+has the reverse-proxy block for native Caddy. Kept because the same Dockerfile
+drives both, but nothing routes through Caddy on Railway.
 
 ```bash
 POSTGRES_PASSWORD=... docker compose up -d --build
 docker compose run --rm app npm run db:migrate
 ```
-
-Only `127.0.0.1:4321` is published; Caddy terminates TLS in front of it — see
-`Caddyfile.example`. Moving to Neon means dropping the `db` service and
-repointing `DATABASE_URL`.
 
 ## Next
 
