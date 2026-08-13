@@ -36,7 +36,7 @@ export interface CreatedSubmission {
 export async function createSubmission(
   payload: SubmissionPayload,
   meta: SubmissionMeta,
-  request: { ip: string | null; userAgent: string | null }
+  request: { ip: string | null; userAgent: string | null; referralClub?: string | null }
 ): Promise<CreatedSubmission> {
   const existing = await findCarIdByChassis(payload.chassisNormalized);
   const kind = existing ? 'update' : 'create';
@@ -45,11 +45,11 @@ export async function createSubmission(
     insert into submissions (
       kind, target_car_id, payload,
       submitter_name, submitter_email, submitter_note,
-      source_ip, user_agent
+      source_ip, user_agent, referral_club
     ) values (
       ${kind}, ${existing?.id ?? null}, ${db().json(payload as any)},
       ${meta.submitterName}, ${meta.submitterEmail}, ${meta.submitterNote},
-      ${request.ip}, ${request.userAgent}
+      ${request.ip}, ${request.userAgent}, ${request.referralClub ?? null}
     )
     returning id
   `;

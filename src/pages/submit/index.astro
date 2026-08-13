@@ -6,6 +6,7 @@ import { validateSubmission } from '../../lib/validation';
 import { createSubmission, recentSubmissionCount } from '../../lib/submissions';
 import { notifyNewSubmission } from '../../lib/notify';
 import { clientIp } from '../../lib/request';
+import { findClub } from '../../data/clubs';
 
 const MAX_PER_HOUR = 5;
 
@@ -41,9 +42,14 @@ if (Astro.request.method === 'POST') {
     });
 
     if (result.ok) {
+      // Only ever a slug we recognise — never the raw query string, which
+      // would put attacker-controlled text in front of a moderator.
+      const referral = findClub(String(form.get('club') ?? ''));
+
       const submission = await createSubmission(result.payload, result.meta, {
         ip,
         userAgent: Astro.request.headers.get('user-agent'),
+        referralClub: referral?.slug ?? null,
       });
 
       notifyNewSubmission(submission, result.payload, result.meta, Astro.url.origin);
@@ -65,6 +71,10 @@ if (Astro.request.method === 'POST') {
 
 const options = await getFilterOptions();
 const prefillChassis = Astro.url.searchParams.get('chassis') ?? '';
+
+// Survives a validation error, because the hidden field is echoed back in
+// `values` along with everything else the visitor typed.
+const club = findClub(values.club ?? Astro.url.searchParams.get('club'));
 ---
 
 <Base
@@ -96,6 +106,7 @@ const prefillChassis = Astro.url.searchParams.get('chassis') ?? '';
         errors={errors}
         values={values}
         prefillChassis={prefillChassis}
+        club={club}
       />
     </div>
   </section>

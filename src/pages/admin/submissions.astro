@@ -3,6 +3,7 @@ import Base from '../../layouts/Base.astro';
 import { listPendingForReview, getQueueCounts, listRecentlyReviewed } from '../../lib/admin';
 import { approveSubmission, rejectSubmission } from '../../lib/submissions';
 import { formatDate } from '../../lib/site';
+import { findClub } from '../../data/clubs';
 
 /**
  * Moderation queue. Access is gated by Google sign-in in src/middleware.ts,
@@ -110,6 +111,7 @@ const [pending, counts, recent] = await Promise.all([
                       </>
                     )}
                     {item.kind === 'update' && ` · ${item.changedCount} field${item.changedCount === 1 ? '' : 's'} changed`}
+                    {item.referralClub && ` · via ${findClub(item.referralClub)?.name ?? item.referralClub}`}
                   </p>
                 </div>
               </header>

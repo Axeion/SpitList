@@ -1,0 +1,311 @@
+---
+import Base from '../../layouts/Base.astro';
+import { findClub } from '../../data/clubs';
+import { getClubTallies } from '../../lib/admin';
+import { formatInt, SITE } from '../../lib/site';
+
+/**
+ * One club's referral link, ready to paste into a newsletter or forum post.
+ *
+ * The public origin is preferred over the request origin so the link is right
+ * even behind a proxy — a secretary copying "http://internal:4321/..." into a
+ * newsletter is a mistake nobody would catch until it was printed.
+ */
+const club = findClub(Astro.params.slug);
+if (!club) {
+  return new Response(null, { status: 404, statusText: 'Club not found' });
+}
+
+const base = (process.env.PUBLIC_SITE_URL ?? Astro.url.origin).replace(/\/+$/, '');
+const link = `${base}/submit?club=${club.slug}`;
+
+const tally = (await getClubTallies()).find((t) => t.slug === club.slug) ?? {
+  slug: club.slug,
+  submitted: 0,
+  published: 0,
+};
+---
+
+<Base
+  title={`${club.name} — Spitplate for clubs`}
+  description={`Referral link and contribution count for ${club.name}.`}
+>
+  <section class="club-head">
+    <div class="wrap">
+      <a class="back mono" href="/for-clubs">← For clubs</a>
+      <span class="section-tag">{club.country}</span>
+      <h1>{club.name}</h1>
+      <p>
+        Give this link to your members. Cars submitted through it are credited to the
+        club.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="link-card">
+        <h2 class="card-title">Your link</h2>
+        <div class="link-row">
+          <input
+            id="referral-link"
+            class="mono"
+            type="text"
+            value={link}
+            readonly
+            aria-label={`Referral link for ${club.name}`}
+          />
+          <button type="button" id="copy" class="btn">Copy</button>
+        </div>
+        <p class="link-note">
+          It opens the ordinary submission form with your club recorded alongside the
+          entry. Nothing about the member is shared back with the club.
+        </p>
+        <p class="link-try">
+          <a href={`/submit?club=${club.slug}`}>See what your members will see →</a>
+        </p>
+      </div>
+
+      <div class="tally">
+        <div class="stat">
+          <b>{formatInt(tally.published)}</b>
+          <span>Cars in the register</span>
+        </div>
+        <div class="stat">
+          <b>{formatInt(tally.submitted)}</b>
+          <span>Submitted through your link</span>
+        </div>
+        <p class="tally-note">
+          {
+            tally.submitted === 0
+              ? 'Nothing yet — this fills in as members submit.'
+              : 'Submitted includes entries still in review, and corrections to cars already listed.'
+          }
+        </p>
+      </div>
+
+      <div class="wording">
+        <h2 class="card-title">Wording you're welcome to use</h2>
+        <blockquote>
+          <p>
+            <b>Is your Spitfire on the register?</b>
+          </p>
+          <p>
+            Spitplate is an independent register of surviving Triumph Spitfires,
+            recorded by commission or VIN number. Adding your car takes a minute — the
+            chassis number and model are the only things needed, and everything else
+            can follow later.
+          </p>
+          <p>
+            Your name and location stay private unless you choose otherwise, and your
+            email is never published. Cars added through the link below are credited to
+            {' '}{club.name}.
+          </p>
+          <p class="mono">{link}</p>
+        </blockquote>
+        <p class="wording-note">
+          Edit it however you like — it is a starting point, not a condition.
+        </p>
+      </div>
+
+      <p class="contact mono">
+        Questions, or want to talk about a roster?{' '}
+        <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<script>
+  // Progressive: the field is selectable and the link is visible as text either
+  // way. This only saves a keystroke.
+  const button = document.getElementById('copy');
+  const field = document.getElementById('referral-link') as HTMLInputElement | null;
+
+  if (button && field) {
+    button.addEventListener('click', async () => {
+      field.select();
+      try {
+        await navigator.clipboard.writeText(field.value);
+      } catch {
+        document.execCommand('copy');
+      }
+      const original = button.textContent;
+      button.textContent = 'Copied';
+      window.setTimeout(() => {
+        button.textContent = original;
+      }, 1600);
+    });
+  }
+</script>
+
+<style>
+  .club-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 40px 0 52px;
+  }
+
+  .back {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    text-decoration: none;
+    margin-bottom: 24px;
+  }
+
+  .back:hover {
+    color: var(--brass-bright);
+  }
+
+  .club-head .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .club-head h1 {
+    font-size: clamp(30px, 4.8vw, 54px);
+    line-height: 1;
+    color: var(--parchment);
+    max-width: 800px;
+  }
+
+  .club-head p {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 560px;
+    margin-top: 16px;
+  }
+
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signal-red);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+
+  .link-card,
+  .wording {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 26px;
+    margin-bottom: 20px;
+  }
+
+  .link-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .link-row input {
+    flex: 1 1 320px;
+    min-width: 0;
+    font-size: 14px;
+    padding: 13px 14px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: #fff;
+    color: var(--ink);
+  }
+
+  .link-row input:focus {
+    outline: 2px solid var(--brass);
+    outline-offset: -1px;
+  }
+
+  .link-note {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-mute);
+    margin: 14px 0 0;
+  }
+
+  .link-try {
+    margin: 10px 0 0;
+    font-size: 14.5px;
+  }
+
+  .link-try a {
+    color: var(--signal-red);
+    text-decoration: none;
+  }
+
+  .tally {
+    display: flex;
+    gap: 44px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 24px 26px;
+    margin-bottom: 20px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+
+  .stat b {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 42px;
+    font-weight: 800;
+    line-height: 1;
+  }
+
+  .stat span {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin-top: 6px;
+  }
+
+  .tally-note {
+    flex: 1 1 240px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+
+  blockquote {
+    margin: 0;
+    padding-left: 18px;
+    border-left: 3px solid var(--brass);
+  }
+
+  blockquote p {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+  }
+
+  blockquote p.mono {
+    font-size: 13.5px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  .wording-note {
+    font-size: 13.5px;
+    color: var(--ink-mute);
+    margin: 16px 0 0;
+  }
+
+  .contact {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--ink-mute);
+  }
+
+  .contact a {
+    color: var(--signal-red);
+  }
+</style>

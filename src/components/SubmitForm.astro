@@ -1,14 +1,17 @@
 ---
 import type { FilterOptions } from '../lib/registry';
+import type { Club } from '../data/clubs';
 
 interface Props {
   options: FilterOptions;
   errors?: Record<string, string>;
   values?: Record<string, string>;
   prefillChassis?: string;
+  /** Set when the visitor arrived through a club's referral link. */
+  club?: Club | null;
 }
 
-const { options, errors = {}, values = {}, prefillChassis = '' } = Astro.props;
+const { options, errors = {}, values = {}, prefillChassis = '', club = null } = Astro.props;
 
 const val = (name: string, fallback = '') => values[name] ?? fallback;
 const checked = (name: string) => values[name] === 'on' || values[name] === '1';
@@ -16,6 +19,21 @@ const err = (name: string) => errors[name];
 ---
 
 <form class="submit-form" method="post" action="/submit" novalidate>
+  {
+    club && (
+      <div class="via-club">
+        <span class="via-label mono">Via</span>
+        <div>
+          <b>{club.name}</b>
+          <p>
+            We'll let them know how many cars came in through their link. Nothing
+            about you is shared with them.
+          </p>
+        </div>
+        <input type="hidden" name="club" value={club.slug} />
+      </div>
+    )
+  }
   {
     Object.keys(errors).length > 0 && (
       <div class="form-error" role="alert">
@@ -243,6 +261,36 @@ const err = (name: string) => errors[name];
 <style>
   .submit-form {
     max-width: 780px;
+  }
+
+  .via-club {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 18px;
+    margin-bottom: 24px;
+    background: var(--card);
+    border: 1px solid var(--brass);
+    border-radius: 3px;
+  }
+
+  .via-label {
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--brass);
+    padding-top: 3px;
+  }
+
+  .via-club b {
+    font-size: 16px;
+  }
+
+  .via-club p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--ink-mute);
   }
 
   fieldset {

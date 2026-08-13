@@ -4,34 +4,40 @@
  * plain text rather than a dead link.
  */
 export interface Club {
+  /** Stable identifier used in referral links. Never change one in use. */
+  slug: string;
   name: string;
   country: string;
   url: string | null;
 }
 
 export const CLUBS: Club[] = [
-  { name: 'Vintage Triumph Register', country: 'US', url: 'https://vtr.org' },
-  { name: 'Triumph Sports Six Club', country: 'UK', url: 'https://tssc.org.uk' },
-  { name: 'Club Triumph', country: 'UK', url: 'https://club.triumph.org.uk' },
-  { name: 'Amicale Spitfire Club', country: 'FR', url: null },
-  { name: 'Rhône-Alpes Spitfire Club', country: 'FR', url: null },
-  { name: 'Triumph Spitfire Club of Holland', country: 'NL', url: null },
-  { name: 'The Triumph Club Holland', country: 'NL', url: null },
-  { name: 'Spitfire Club Deutschlands', country: 'DE', url: null },
-  { name: 'Dansk Triumph Automobil Klub', country: 'DK', url: null },
-  { name: 'Triumph Club of Sweden', country: 'SE', url: null },
-  { name: 'The Swiss Spitfire Club', country: 'CH', url: null },
-  { name: 'Registro Italiano Triumph Spitfires', country: 'IT', url: null },
-  { name: 'Triumph Cars Club of Finland', country: 'FI', url: null },
-  { name: 'Triumph British Oldtimers', country: 'BE', url: null },
-  { name: 'Belgium TR Register', country: 'BE', url: null },
-  { name: 'Triumph Sports Club Greece', country: 'GR', url: null },
-  { name: 'Auckland Triumph Car Club', country: 'NZ', url: null },
-  { name: 'Triumph Sports Owners Assoc.', country: 'AU', url: null },
-  { name: 'Triumph Spitfire Peru', country: 'PE', url: null },
-  { name: 'Triumph Club of Northern Ireland', country: 'NI', url: null },
-  { name: 'Triumph Spitfire Portugal', country: 'PT', url: null },
+  { slug: 'vtr', name: 'Vintage Triumph Register', country: 'US', url: 'https://vtr.org' },
+  { slug: 'tssc', name: 'Triumph Sports Six Club', country: 'UK', url: 'https://tssc.org.uk' },
+  { slug: 'club-triumph', name: 'Club Triumph', country: 'UK', url: 'https://club.triumph.org.uk' },
+  { slug: 'amicale-spitfire', name: 'Amicale Spitfire Club', country: 'FR', url: null },
+  { slug: 'rhone-alpes-spitfire', name: 'Rhône-Alpes Spitfire Club', country: 'FR', url: null },
+  { slug: 'spitfire-club-holland', name: 'Triumph Spitfire Club of Holland', country: 'NL', url: null },
+  { slug: 'triumph-club-holland', name: 'The Triumph Club Holland', country: 'NL', url: null },
+  { slug: 'spitfire-club-deutschlands', name: 'Spitfire Club Deutschlands', country: 'DE', url: null },
+  { slug: 'dtak', name: 'Dansk Triumph Automobil Klub', country: 'DK', url: null },
+  { slug: 'triumph-club-sweden', name: 'Triumph Club of Sweden', country: 'SE', url: null },
+  { slug: 'swiss-spitfire', name: 'The Swiss Spitfire Club', country: 'CH', url: null },
+  { slug: 'registro-italiano', name: 'Registro Italiano Triumph Spitfires', country: 'IT', url: null },
+  { slug: 'triumph-finland', name: 'Triumph Cars Club of Finland', country: 'FI', url: null },
+  { slug: 'british-oldtimers', name: 'Triumph British Oldtimers', country: 'BE', url: null },
+  { slug: 'belgium-tr', name: 'Belgium TR Register', country: 'BE', url: null },
+  { slug: 'triumph-greece', name: 'Triumph Sports Club Greece', country: 'GR', url: null },
+  { slug: 'auckland-triumph', name: 'Auckland Triumph Car Club', country: 'NZ', url: null },
+  { slug: 'tsoa-au', name: 'Triumph Sports Owners Assoc.', country: 'AU', url: null },
+  { slug: 'spitfire-peru', name: 'Triumph Spitfire Peru', country: 'PE', url: null },
+  { slug: 'triumph-ni', name: 'Triumph Club of Northern Ireland', country: 'NI', url: null },
+  { slug: 'spitfire-portugal', name: 'Triumph Spitfire Portugal', country: 'PT', url: null },
 ];
+
+/** Look up a club by referral slug. Returns null for anything unrecognised. */
+export const findClub = (slug: string | null | undefined): Club | null =>
+  (slug ? CLUBS.find((club) => club.slug === slug) : undefined) ?? null;
 
 /**
  * Reference pages. `href` points at a route we own; `ready: false` marks the

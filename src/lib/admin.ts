@@ -34,6 +34,8 @@ export interface ReviewItem {
   submitterName: string | null;
   submitterEmail: string | null;
   submitterNote: string | null;
+  /** Slug of the club whose link produced this, if any. */
+  referralClub: string | null;
   payload: SubmissionPayload;
   diff: FieldDiff[];
   changedCount: number;
@@ -96,7 +98,7 @@ function buildDiff(payload: SubmissionPayload, current: Record<string, any> | nu
 export async function listPendingForReview(limit = 50): Promise<ReviewItem[]> {
   const rows = await db()`
     select s.id, s.kind, s.payload, s.created_at,
-           s.submitter_name, s.submitter_email, s.submitter_note,
+           s.submitter_name, s.submitter_email, s.submitter_note, s.referral_club,
            c.public_ref as target_public_ref,
            to_jsonb(c) - 'id' as current_car
     from submissions s
@@ -116,6 +118,7 @@ export async function listPendingForReview(limit = 50): Promise<ReviewItem[]> {
       submitterName: r.submitter_name ?? null,
       submitterEmail: r.submitter_email ?? null,
       submitterNote: r.submitter_note ?? null,
+      referralClub: r.referral_club ?? null,
       payload: r.payload,
       diff,
       changedCount: diff.filter((d) => d.changed).length,
@@ -142,6 +145,30 @@ export async function getQueueCounts(): Promise<QueueCounts> {
     approvedToday: num(row.approved_today),
     rejectedToday: num(row.rejected_today),
   };
+}
+
+/** Cars contributed through each club's referral link. */
+export interface ClubTally {
+  slug: string;
+  submitted: number;
+  published: number;
+}
+
+export async function getClubTallies(): Promise<ClubTally[]> {
+  const rows = await db()`
+    select s.referral_club as slug,
+           count(*) as submitted,
+           count(c.id) filter (where c.status = 'published') as published
+    from submissions s
+    left join cars c on c.id = s.resulting_car_id
+    where s.referral_club is not null
+    group by s.referral_club
+  `;
+  return rows.map((r) => ({
+    slug: r.slug,
+    submitted: num(r.submitted),
+    published: num(r.published),
+  }));
 }
 
 export interface RecentReview {

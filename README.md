@@ -38,6 +38,8 @@ worse than one that visibly fails.
 | `/reference` | Reference index. |
 | `/reference/decoder` | Live commission-number / VIN decoder. |
 | `/reference/:slug` | Markdown reference pages, prerendered. |
+| `/for-clubs` | Pitch page for club secretaries, plus every club's referral link. |
+| `/for-clubs/:slug` | One club's link, contribution tally, and suggested newsletter wording. |
 | `/admin/login` | Google sign-in for moderators. |
 | `/admin/submissions` | Moderation queue. Signed-in moderators only. |
 | `/api/submissions/:id` | Moderation callback for n8n. Bearer auth. |
@@ -338,6 +340,22 @@ drives both, but nothing routes through Caddy on Railway.
 POSTGRES_PASSWORD=... docker compose up -d --build
 docker compose run --rm app npm run db:migrate
 ```
+
+## Club referrals
+
+`/submit?club=<slug>` records which club sent a submission our way. Slugs live in
+`src/data/clubs.ts` and are validated on the way in — the raw query string is
+never stored or echoed, so a crafted link cannot put text in front of a
+moderator.
+
+Attribution is stored on `submissions` rather than `cars`; every approved car
+keeps its submission row, so the credit survives without duplicating it. That is
+what powers the per-club tally on `/for-clubs/:slug`, which exists because
+"forty-two cars came in through your link" is the only answer that makes a club
+want to share it again.
+
+Nothing about a submitter is ever shared back with the club — the tally is
+counts only.
 
 ## Bulk import
 
