@@ -18,6 +18,12 @@ export function notifyNewSubmission(
   const url = process.env.N8N_SUBMISSION_WEBHOOK_URL;
   if (!url) return; // Unconfigured in development — nothing to do.
 
+  // The links in the Discord card must be publicly reachable. Behind a proxy
+  // the request origin can resolve to the internal host and scheme, which would
+  // put http://something.internal:4321/... in front of a moderator, so an
+  // explicit public URL wins when it is set.
+  const base = (process.env.PUBLIC_SITE_URL ?? siteUrl).replace(/\/+$/, '');
+
   const body = {
     submissionId: submission.id,
     kind: submission.kind,
@@ -29,8 +35,8 @@ export function notifyNewSubmission(
     submitterName: meta.submitterName,
     submitterEmail: meta.submitterEmail,
     submitterNote: meta.submitterNote,
-    reviewUrl: `${siteUrl}/admin/submissions`,
-    approveUrl: `${siteUrl}/api/submissions/${submission.id}`,
+    reviewUrl: `${base}/admin/submissions`,
+    approveUrl: `${base}/api/submissions/${submission.id}`,
   };
 
   const timeout = AbortSignal.timeout(5000);
