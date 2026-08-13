@@ -35,6 +35,10 @@ worse than one that visibly fails.
 | `/registry/:ref` | One car. `SP-00042`. |
 | `/submit` | Public add/correct form (GET renders, POST files). |
 | `/submit/thanks` | Post/Redirect/Get landing, so a refresh doesn't file twice. |
+| `/reference` | Reference index. |
+| `/reference/decoder` | Live commission-number / VIN decoder. |
+| `/reference/:slug` | Markdown reference pages, prerendered. |
+| `/admin/submissions` | Moderation queue. Basic auth. |
 | `/api/submissions/:id` | Moderation callback for n8n. Bearer auth. |
 | `/health` | DB ping. 200 `ok` / 503 `degraded`. |
 
@@ -114,6 +118,30 @@ There are no accounts (out of scope for v1), so the public form leans on:
 The rate limit reads `X-Forwarded-For`, which is only trustworthy because
 Railway's edge sets it. If this app is ever exposed directly, that header
 becomes attacker-controlled and the limit becomes decorative.
+
+## Reference pages
+
+Markdown under `src/content/reference/`, typed by `src/content.config.ts` and
+prerendered — they hold no per-request data, so they are built once.
+
+Two pieces of frontmatter carry the project's attitude to facts:
+
+- **`sources`** — where the page's claims came from, rendered at the foot of the
+  page. A registry that asks owners to trust its data should say where its own
+  reference material comes from.
+- **`status: needs-sourcing`** — marks a page we cannot yet stand behind. It
+  renders with a warning instead of quietly reading as authoritative.
+  `paint-codes` is deliberately in this state: a wrong paint code sends someone
+  to a mixer with money in hand, and the charts circulating on forums disagree.
+
+`/reference/decoder` is a live tool rather than a document. It reports only what
+can be established from a number's *structure* plus reference data this project
+actually holds — it reads the VIN steering/overdrive digit and the commission
+suffix letters, names the series a prefix belongs to, and says when a prefix
+spans more than one. It deliberately does **not** map a serial to a model year,
+because `chassis_series.serial_from`/`serial_to` are still unsourced. A decoder
+that confidently returns a wrong year is worse than one that says it doesn't
+know.
 
 ## Scripts
 
@@ -248,16 +276,15 @@ docker compose run --rm app npm run db:migrate
 
 ## Next
 
-1. **Admin moderation view** — a web queue at `/admin/submissions`. The
-   approve/reject write path already exists and is what n8n calls; this is a
-   human-facing surface over the same functions, and the first thing here that
-   will need real auth rather than a shared token.
-2. **Reference pages** — VIN and commission-number decoders, paint codes, as
-   markdown content collections.
-3. **Sourcing real serial ranges** for `chassis_series`, currently NULL on
-   purpose.
-4. **Image uploads** — deferred in the handoff, and the main thing owners will
+1. **Sourcing real serial ranges** for `chassis_series`, currently NULL on
+   purpose. This is the single unlock with the widest effect: it would let the
+   decoder date a car from its number, let the registry validate submissions
+   against the series they claim, and let the paint chart be finished.
+2. **Image uploads** — deferred in the handoff, and the main thing owners will
    ask for once the registry has entries.
+3. **Real accounts**, whenever there is more than one moderator. Basic auth over
+   `/admin` and a shared bearer token are honest for one person and stop being
+   so for three.
 
 Known follow-ups: fonts are loaded from Google Fonts and should be self-hosted
 before launch (privacy, and one less render-blocking third party); the club

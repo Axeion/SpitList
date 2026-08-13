@@ -1,0 +1,286 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+import { formatDate } from '../../lib/site';
+
+// Reference pages are static content with no per-request data, so they are
+// prerendered at build time. getStaticPaths only applies to prerendered routes
+// in server output.
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const pages = await getCollection('reference');
+  return pages.map((page) => ({ params: { slug: page.id }, props: { page } }));
+}
+
+const { page } = Astro.props;
+const { Content } = await render(page);
+const needsSourcing = page.data.status === 'needs-sourcing';
+---
+
+<Base title={`${page.data.title} — Spitplate reference`} description={page.data.summary}>
+  <article>
+    <header class="doc-head">
+      <div class="wrap">
+        <a class="back mono" href="/reference">← Reference</a>
+        <h1>{page.data.title}</h1>
+        <p class="summary">{page.data.summary}</p>
+      </div>
+    </header>
+
+    <div class="section doc-body">
+      <div class="wrap">
+        {
+          needsSourcing && (
+            <div class="warn" role="note">
+              <b>This page is incomplete on purpose.</b> We have not been able to
+              source its content against a record we can stand behind, so it does not
+              publish one. Read it as an open question, not as reference.
+            </div>
+          )
+        }
+
+        <div class="prose">
+          <Content />
+        </div>
+
+        <footer class="doc-foot">
+          {
+            page.data.sources.length > 0 && (
+              <div class="sources">
+                <h2>Sources</h2>
+                <ul>
+                  {page.data.sources.map((source) => (
+                    <li>
+                      <a href={source.url} rel="noopener external">
+                        {source.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          }
+
+          <p class="stamp mono">
+            {page.data.updated ? `Last reviewed ${formatDate(page.data.updated)} · ` : ''}
+            Spot something wrong? <a href="/submit">Tell us</a>.
+          </p>
+        </footer>
+      </div>
+    </div>
+  </article>
+</Base>
+
+<style>
+  .doc-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 40px 0 48px;
+  }
+
+  .back {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    text-decoration: none;
+    margin-bottom: 24px;
+  }
+
+  .back:hover {
+    color: var(--brass-bright);
+  }
+
+  .doc-head h1 {
+    font-size: clamp(32px, 5vw, 54px);
+    line-height: 1;
+    color: var(--parchment);
+    max-width: 800px;
+  }
+
+  .summary {
+    font-size: 17.5px;
+    line-height: 1.55;
+    color: var(--chrome);
+    max-width: 620px;
+    margin-top: 16px;
+  }
+
+  .doc-body {
+    padding: 44px 0 88px;
+  }
+
+  .doc-body .wrap {
+    max-width: 760px;
+  }
+
+  .warn {
+    border: 1px solid var(--signal-red);
+    background: rgba(165, 56, 42, 0.07);
+    border-radius: 3px;
+    padding: 16px 18px;
+    margin-bottom: 32px;
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+
+  /* Markdown output. Scoped styles don't reach <Content />, so these are
+     global but namespaced under .prose. */
+  .prose :global(h2) {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    font-size: 30px;
+    line-height: 1.05;
+    margin: 44px 0 14px;
+  }
+
+  .prose :global(h3) {
+    font-family: var(--font-body);
+    text-transform: none;
+    font-weight: 700;
+    font-size: 19px;
+    letter-spacing: 0;
+    margin: 30px 0 10px;
+  }
+
+  .prose :global(p) {
+    font-size: 17px;
+    line-height: 1.72;
+    color: #332f28;
+    margin: 0 0 18px;
+  }
+
+  .prose :global(ul),
+  .prose :global(ol) {
+    font-size: 17px;
+    line-height: 1.72;
+    color: #332f28;
+    padding-left: 22px;
+    margin: 0 0 18px;
+  }
+
+  .prose :global(li) {
+    margin-bottom: 8px;
+  }
+
+  .prose :global(a) {
+    color: var(--signal-red);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(165, 56, 42, 0.35);
+  }
+
+  .prose :global(a:hover) {
+    border-color: var(--signal-red);
+  }
+
+  .prose :global(strong) {
+    font-weight: 700;
+  }
+
+  .prose :global(code) {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: rgba(20, 20, 15, 0.06);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+
+  .prose :global(pre) {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 20px 22px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 0 0 22px;
+  }
+
+  .prose :global(pre code) {
+    background: none;
+    padding: 0;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--parchment);
+  }
+
+  .prose :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    margin: 0 0 24px;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .prose :global(th),
+  .prose :global(td) {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  .prose :global(th) {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--brass);
+    font-weight: 500;
+  }
+
+  .prose :global(blockquote) {
+    margin: 0 0 20px;
+    padding-left: 18px;
+    border-left: 3px solid var(--brass);
+    color: var(--ink-soft);
+  }
+
+  .doc-foot {
+    margin-top: 52px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+
+  .sources h2 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+
+  .sources ul {
+    list-style: none;
+    margin: 0 0 22px;
+    padding: 0;
+  }
+
+  .sources li {
+    font-size: 14.5px;
+    margin-bottom: 6px;
+  }
+
+  .sources a {
+    color: var(--ink-soft);
+  }
+
+  .sources a:hover {
+    color: var(--signal-red);
+  }
+
+  .stamp {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+
+  .stamp a {
+    color: var(--signal-red);
+  }
+</style>

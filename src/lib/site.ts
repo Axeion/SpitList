@@ -27,7 +27,7 @@ export const NAV_LINKS = [
   { href: '/#history', label: 'History' },
   { href: '/#stats', label: 'Stats' },
   { href: '/#clubs', label: 'Clubs' },
-  { href: '/#resources', label: 'Resources' },
+  { href: '/reference', label: 'Reference' },
 ] as const;
 
 export const formatInt = (n: number) => n.toLocaleString('en-US');

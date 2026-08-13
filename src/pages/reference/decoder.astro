@@ -1,0 +1,420 @@
+---
+import Base from '../../layouts/Base.astro';
+import { decodeNumber } from '../../lib/decode';
+import { db } from '../../lib/db';
+import { findCarIdByChassis } from '../../lib/registry';
+
+/**
+ * Live decoder. Plain GET form — no JavaScript, shareable result URLs.
+ *
+ * Everything it reports comes from the number's structure or from this
+ * project's own reference data. Nothing is inferred from a table we cannot
+ * stand behind.
+ */
+const raw = Astro.url.searchParams.get('number')?.trim() ?? '';
+const decoded = raw ? decodeNumber(raw) : null;
+
+let seriesMatches: { label: string; market: string; yearFrom: number | null; yearTo: number | null }[] = [];
+let registered: { publicRef: string } | null = null;
+
+if (decoded && decoded.format !== 'unrecognised') {
+  const [rows, existing] = await Promise.all([
+    db()`
+      select s.label, s.market, s.year_from, s.year_to
+      from chassis_series s
+      where s.prefix = ${decoded.format === 'vin' ? 'VIN' : decoded.prefix}
+      order by s.ordinal
+    `,
+    findCarIdByChassis(decoded.normalized),
+  ]);
+
+  seriesMatches = rows.map((r) => ({
+    label: r.label,
+    market: r.market,
+    yearFrom: r.year_from === null ? null : Number(r.year_from),
+    yearTo: r.year_to === null ? null : Number(r.year_to),
+  }));
+  registered = existing ? { publicRef: existing.publicRef } : null;
+}
+
+const MARKET_LABELS: Record<string, string> = {
+  worldwide: 'Worldwide',
+  'north-america': 'North America',
+  'rest-of-world': 'Rest of world',
+};
+---
+
+<Base
+  title="Number decoder — Spitplate"
+  description="Decode a Triumph Spitfire commission number or VIN, and check whether it is already in the registry."
+>
+  <section class="dec-head">
+    <div class="wrap">
+      <a class="back mono" href="/reference">← Reference</a>
+      <span class="section-tag">Decoder</span>
+      <h1>Read a chassis number.</h1>
+      <p>
+        Commission numbers and 1979–81 VINs both work. Spacing and punctuation don't
+        matter.
+      </p>
+
+      <form class="dec-form" method="get" action="/reference/decoder">
+        <label class="visually-hidden" for="number">Chassis or commission number</label>
+        <input
+          type="text"
+          id="number"
+          name="number"
+          value={raw}
+          placeholder="FH 45231 L  ·  TFADW5AT009898"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        />
+        <button type="submit" class="btn">Decode</button>
+      </form>
+    </div>
+  </section>
+
+  {
+    decoded && (
+      <section class="section dec-body">
+        <div class="wrap">
+          {decoded.format === 'unrecognised' ? (
+            <div class="card miss">
+              <h2>That doesn't look like a Spitfire number.</h2>
+              <p>
+                Read as <code>{decoded.normalized || '(nothing)'}</code>. A commission
+                number is letters then digits, optionally followed by more letters —
+                <code>FH45231L</code>. A late VIN is five letters, a digit, two letters,
+                then six digits — <code>TFADW5AT009898</code>.
+              </p>
+              <p>
+                If your plate genuinely reads something else, that is worth knowing:
+                <a href="/submit"> submit the car</a> and put the number in the notes.
+              </p>
+            </div>
+          ) : (
+            <div class="result-grid">
+              <div class="card">
+                <h2 class="card-title">
+                  {decoded.normalized}
+                </h2>
+
+                <dl class="facts">
+                  {decoded.facts.map((fact) => (
+                    <div class="fact">
+                      <dt>{fact.label}</dt>
+                      <dd class={fact.uncertain ? 'is-uncertain' : ''}>{fact.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                {seriesMatches.length > 0 && (
+                  <div class="series">
+                    <h3>
+                      {seriesMatches.length === 1
+                        ? 'This prefix belongs to'
+                        : 'This prefix spans more than one series'}
+                    </h3>
+                    <ul>
+                      {seriesMatches.map((s) => (
+                        <li>
+                          <b>{s.label}</b>
+                          <span class="mono">
+                            {MARKET_LABELS[s.market] ?? s.market}
+                            {s.yearFrom ? ` · ${s.yearFrom}–${s.yearTo ?? ''}` : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {seriesMatches.length > 1 && (
+                      <p class="series-note">
+                        The prefix alone cannot separate these — the serial can, once
+                        those ranges are sourced.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div class="side">
+                <div class={`card status ${registered ? 'is-known' : 'is-new'}`}>
+                  <h3>In the registry?</h3>
+                  {registered ? (
+                    <>
+                      <p>
+                        Yes — this chassis is logged as{' '}
+                        <a href={`/registry/${registered.publicRef}`}>{registered.publicRef}</a>.
+                      </p>
+                      <a class="btn ghost" href={`/submit?chassis=${encodeURIComponent(raw)}`}>
+                        File a correction
+                      </a>
+                    </>
+                  ) : (
+                    <>
+                      <p>Not yet. If this is your car, it can be.</p>
+                      <a class="btn" href={`/submit?chassis=${encodeURIComponent(raw)}`}>
+                        Add it to the registry
+                      </a>
+                    </>
+                  )}
+                </div>
+
+                {decoded.unknowns.length > 0 && (
+                  <div class="card unknowns">
+                    <h3>What this can't tell you</h3>
+                    <ul>
+                      {decoded.unknowns.map((u) => (
+                        <li>{u}</li>
+                      ))}
+                    </ul>
+                    <p>
+                      For an individual car, a{' '}
+                      <a href="/reference/heritage-certificates">Heritage Certificate</a> is
+                      the authoritative answer.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+</Base>
+
+<style>
+  .dec-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 40px 0 52px;
+  }
+
+  .back {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    text-decoration: none;
+    margin-bottom: 24px;
+  }
+
+  .back:hover {
+    color: var(--brass-bright);
+  }
+
+  .dec-head .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .dec-head h1 {
+    font-size: clamp(32px, 5vw, 54px);
+    line-height: 1;
+    color: var(--parchment);
+  }
+
+  .dec-head p {
+    font-size: 17px;
+    color: var(--chrome);
+    max-width: 560px;
+    margin-top: 14px;
+  }
+
+  .dec-form {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 28px;
+    max-width: 620px;
+  }
+
+  .dec-form input {
+    flex: 1 1 300px;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    padding: 14px 16px;
+    border: 1px solid rgba(241, 231, 210, 0.25);
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--parchment);
+  }
+
+  .dec-form input::placeholder {
+    color: rgba(185, 194, 194, 0.5);
+  }
+
+  .dec-form input:focus {
+    outline: 2px solid var(--brass);
+    outline-offset: -1px;
+  }
+
+  .dec-body {
+    padding: 44px 0 88px;
+  }
+
+  .result-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .result-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 26px;
+  }
+
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    margin-bottom: 20px;
+  }
+
+  .facts {
+    margin: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .fact {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 14px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  @media (max-width: 520px) {
+    .fact {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+  }
+
+  .facts dt {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    padding-top: 3px;
+  }
+
+  .facts dd {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .facts dd.is-uncertain {
+    color: var(--ink-mute);
+    font-style: italic;
+  }
+
+  .series {
+    margin-top: 24px;
+  }
+
+  .series h3,
+  .side h3 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--signal-red);
+    font-weight: 500;
+    margin-bottom: 12px;
+  }
+
+  .series ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .series li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 15px;
+  }
+
+  .series li span {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  .series-note {
+    font-size: 13.5px;
+    color: var(--ink-mute);
+    margin: 12px 0 0;
+  }
+
+  .side {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .status.is-known {
+    border-color: var(--racing-green-3);
+  }
+
+  .status p,
+  .unknowns p {
+    font-size: 15.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0 0 16px;
+  }
+
+  .unknowns ul {
+    margin: 0 0 14px;
+    padding-left: 18px;
+  }
+
+  .unknowns li {
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin-bottom: 8px;
+  }
+
+  .miss h2 {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+
+  .miss p {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    background: rgba(20, 20, 15, 0.06);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+</style>
