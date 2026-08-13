@@ -1,6 +1,6 @@
 ---
 import Base from '../../layouts/Base.astro';
-import { readOAuthConfig, readSession, SESSION_COOKIE } from '../../lib/auth';
+import { readOAuthConfig, readSession, redirectUri, SESSION_COOKIE } from '../../lib/auth';
 
 const config = readOAuthConfig();
 
@@ -26,6 +26,13 @@ const MESSAGES: Record<string, string> = {
 
 const message = error ? (MESSAGES[error] ?? error) : null;
 const startHref = `/admin/auth/start?next=${encodeURIComponent(next)}`;
+
+// The redirect URI Google must have registered. Shown whenever something is
+// wrong, because "which exact string do I paste into the console" is the
+// question every one of these failures actually raises.
+const expectedRedirect = config.ok
+  ? redirectUri(config.config.siteUrl)
+  : config.redirectUri;
 ---
 
 <Base title="Sign in — Spitplate moderation">
@@ -45,17 +52,55 @@ const startHref = `/admin/auth/start?next=${encodeURIComponent(next)}`;
               else on Spitplate is public.
             </p>
             <a class="btn" href={startHref}>Continue with Google</a>
+
+            {
+              message && expectedRedirect && (
+                <p class="hint">
+                  This deployment sends Google the redirect URI{' '}
+                  <code>{expectedRedirect}</code>. It has to be registered on the OAuth
+                  client, character for character.
+                </p>
+              )
+            }
           </>
         ) : (
           <div class="setup">
-            <p class="lede">
-              Sign-in is not configured. These environment variables are missing:
-            </p>
-            <ul>
-              {config.missing.map((name) => (
-                <li class="mono">{name}</li>
-              ))}
-            </ul>
+            {
+              config.missing.length > 0 && (
+                <>
+                  <p class="lede">
+                    Sign-in is not configured. These environment variables are missing:
+                  </p>
+                  <ul>
+                    {config.missing.map((name) => (
+                      <li class="mono">{name}</li>
+                    ))}
+                  </ul>
+                </>
+              )
+            }
+
+            {
+              config.problems.length > 0 && (
+                <>
+                  <p class="lede">Sign-in is configured, but not correctly:</p>
+                  <ul class="problems">
+                    {config.problems.map((problem) => (
+                      <li>{problem}</li>
+                    ))}
+                  </ul>
+                </>
+              )
+            }
+
+            {
+              expectedRedirect && (
+                <p class="note">
+                  The redirect URI to register on the OAuth client is{' '}
+                  <code>{expectedRedirect}</code>.
+                </p>
+              )
+            }
             <p class="note">
               Until they are set, nobody can reach the queue through a browser.
               Submissions still arrive and can still be approved through
@@ -120,6 +165,30 @@ const startHref = `/admin/auth/start?next=${encodeURIComponent(next)}`;
     list-style: none;
     padding: 0;
     margin: 0 0 22px;
+  }
+
+  .problems li {
+    font-family: var(--font-body);
+    font-size: 15.5px;
+    line-height: 1.55;
+    letter-spacing: 0;
+    color: var(--chrome);
+    max-width: 620px;
+    padding: 8px 0;
+  }
+
+  .hint {
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 560px;
+    margin-top: 26px;
+  }
+
+  .hint code,
+  .note code {
+    display: inline-block;
+    margin-top: 6px;
   }
 
   .setup li {

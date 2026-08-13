@@ -35,15 +35,27 @@ export interface OAuthConfig {
   allowed: string[];
 }
 
+export type OAuthConfigResult =
+  | { ok: true; config: OAuthConfig }
+  | { ok: false; missing: string[]; problems: string[]; redirectUri: string | null };
+
 /**
- * Reads configuration, or explains what is missing. Returning the reason rather
+ * Reads configuration, or explains what is wrong. Returning the reason rather
  * than throwing lets /admin/login render a useful page instead of a 500.
+ *
+ * PUBLIC_SITE_URL is validated as an absolute URL rather than trusted, because
+ * the failure it causes is remote and unhelpful: a bare "spitplate.com" builds
+ * the redirect_uri "spitplate.com/admin/auth/callback", which is not a URI at
+ * all, and Google answers with a generic "Error 400: invalid_request" that says
+ * nothing about the cause. Catching it here turns a dead end into a sentence.
  */
-export function readOAuthConfig(): { ok: true; config: OAuthConfig } | { ok: false; missing: string[] } {
+export function readOAuthConfig(): OAuthConfigResult {
   const missing: string[] = [];
-  const clientId = process.env.GOOGLE_CLIENT_ID ?? '';
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET ?? '';
-  const siteUrl = (process.env.PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+  const problems: string[] = [];
+
+  const clientId = (process.env.GOOGLE_CLIENT_ID ?? '').trim();
+  const clientSecret = (process.env.GOOGLE_CLIENT_SECRET ?? '').trim();
+  const rawSite = (process.env.PUBLIC_SITE_URL ?? '').trim();
   const allowed = (process.env.ADMIN_ALLOWED_EMAILS ?? '')
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
@@ -51,10 +63,44 @@ export function readOAuthConfig(): { ok: true; config: OAuthConfig } | { ok: fal
 
   if (!clientId) missing.push('GOOGLE_CLIENT_ID');
   if (!clientSecret) missing.push('GOOGLE_CLIENT_SECRET');
-  if (!siteUrl) missing.push('PUBLIC_SITE_URL');
+  if (!rawSite) missing.push('PUBLIC_SITE_URL');
   if (allowed.length === 0) missing.push('ADMIN_ALLOWED_EMAILS');
 
-  if (missing.length) return { ok: false, missing };
+  let siteUrl = '';
+  if (rawSite) {
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(rawSite);
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed) {
+      problems.push(
+        `PUBLIC_SITE_URL is "${rawSite}", which has no scheme. It must be a full URL — https://spitplate.com, not spitplate.com.`
+      );
+    } else if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      problems.push(`PUBLIC_SITE_URL uses "${parsed.protocol}". Use https://.`);
+    } else if (parsed.protocol === 'http:' && parsed.hostname !== 'localhost') {
+      // Google only accepts http for localhost.
+      problems.push(
+        `PUBLIC_SITE_URL is http:// on a public host. Google only accepts https:// redirect URIs (http is allowed for localhost only).`
+      );
+    } else {
+      // Origin only — a stray path would end up inside the redirect URI.
+      siteUrl = parsed.origin;
+    }
+  }
+
+  if (missing.length || problems.length) {
+    return {
+      ok: false,
+      missing,
+      problems,
+      redirectUri: siteUrl ? redirectUri(siteUrl) : null,
+    };
+  }
+
   return { ok: true, config: { clientId, clientSecret, siteUrl, allowed } };
 }
 

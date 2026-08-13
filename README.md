@@ -122,7 +122,16 @@ https://spitplate.com/admin/auth/callback
 ```
 
 `PUBLIC_SITE_URL` is what that redirect URI is built from, so sign-in cannot
-work without it.
+work without it — and it must be a **full URL with the scheme**. A bare
+`spitplate.com` builds the redirect URI `spitplate.com/admin/auth/callback`,
+which is not a URI at all; Google answers with a bare
+`Error 400: invalid_request` that says nothing about the cause. The app now
+rejects that at startup and says so on `/admin/login` instead of forwarding a
+broken request, and prints the exact redirect URI to register.
+
+Use a **Google Cloud project of its own** for Spitplate. Reusing a client from
+another project works, but the consent screen shows that project's name, so
+moderators get asked to sign in to something unrelated.
 
 **An empty allowlist admits nobody.** Unconfigured is closed, and `/admin/login`
 says which variables are missing rather than returning a blank 503.
