@@ -77,17 +77,45 @@ are swept with `delete from cars where source = 'seed';`. See
 
 ## Deploying
 
-Multi-stage `Dockerfile` producing a standalone Node server, `docker-compose.yml`
-for app + Postgres on the VPS, and `Caddyfile.example` for the native Caddy
-reverse proxy.
+One multi-stage `Dockerfile` serves both supported targets. It ships `db/` and
+`scripts/` into the runtime image, so migrations can be run against the deployed
+version either way.
+
+`GET /health` pings the database and returns 200 (`ok`) or 503 (`degraded`).
+It's the healthcheck for both paths — a healthy response means "can serve real
+data", not just "process is up".
+
+### Railway
+
+```bash
+railway init
+railway add --database postgres
+railway up
+```
+
+`railway.json` sets the Dockerfile builder, points the healthcheck at `/health`,
+and runs `npm run db:migrate` as a pre-deploy step so schema changes land before
+the new version takes traffic. Set `DATABASE_URL` on the app service to the
+reference variable `${{Postgres.DATABASE_URL}}`; Railway injects `PORT` and
+terminates TLS, so `docker-compose.yml` and `Caddyfile.example` are unused here.
+
+Note the image is Debian-slim, not Alpine, deliberately: Railway's private
+networking is IPv6-only and musl-based images need an extra opt-in flag to
+resolve `*.railway.internal`. glibc avoids that failure mode entirely.
+
+Seeding is *not* part of the deploy. `db:seed` generates synthetic cars and
+should never run against production.
+
+### VPS (Docker + native Caddy)
 
 ```bash
 POSTGRES_PASSWORD=... docker compose up -d --build
 docker compose run --rm app npm run db:migrate
 ```
 
-Only `127.0.0.1:4321` is published; Caddy terminates TLS in front of it. Moving
-to Neon means dropping the `db` service and repointing `DATABASE_URL`.
+Only `127.0.0.1:4321` is published; Caddy terminates TLS in front of it — see
+`Caddyfile.example`. Moving to Neon means dropping the `db` service and
+repointing `DATABASE_URL`.
 
 ## Next
 

@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 
 # ---- build ----------------------------------------------------------------
-FROM node:22-alpine AS build
+# Debian-slim rather than Alpine on purpose: Railway's private networking is
+# IPv6-only, and musl-based images need an extra opt-in flag to resolve
+# *.railway.internal. glibc sidesteps that whole class of DNS failure, and the
+# image is still small enough not to care.
+FROM node:22-slim AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -14,7 +18,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- runtime --------------------------------------------------------------
-FROM node:22-alpine AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -32,7 +36,8 @@ COPY --from=build /app/scripts ./scripts
 USER node
 EXPOSE 4321
 
+# Mirrors what Railway's healthcheckPath checks, for the compose/VPS path.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4321)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||4321)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "./dist/server/entry.mjs"]
