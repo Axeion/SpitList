@@ -38,7 +38,8 @@ worse than one that visibly fails.
 | `/reference` | Reference index. |
 | `/reference/decoder` | Live commission-number / VIN decoder. |
 | `/reference/:slug` | Markdown reference pages, prerendered. |
-| `/admin/submissions` | Moderation queue. Basic auth. |
+| `/admin/login` | Google sign-in for moderators. |
+| `/admin/submissions` | Moderation queue. Signed-in moderators only. |
 | `/api/submissions/:id` | Moderation callback for n8n. Bearer auth. |
 | `/health` | DB ping. 200 `ok` / 503 `degraded`. |
 
@@ -102,6 +103,56 @@ carry the submitter's email — only a "contact on file" flag. The address itsel
 stays behind the admin login rather than being copied into a chat log. The
 normalizing step drops it, so it cannot leak even if the card template changes.
 
+## Moderator sign-in
+
+`/admin` is gated by **Google sign-in against an explicit email allowlist**.
+
+```
+ADMIN_ALLOWED_EMAILS=you@example.com,someone@club.org
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+PUBLIC_SITE_URL=https://spitplate.com
+```
+
+Create the client at [Google Cloud credentials](https://console.cloud.google.com/apis/credentials)
+as a **Web application**, and add exactly one authorised redirect URI:
+
+```
+https://spitplate.com/admin/auth/callback
+```
+
+`PUBLIC_SITE_URL` is what that redirect URI is built from, so sign-in cannot
+work without it.
+
+**An empty allowlist admits nobody.** Unconfigured is closed, and `/admin/login`
+says which variables are missing rather than returning a blank 503.
+
+The allowlist is re-checked on **every request**, not just at sign-in, so
+removing an address ends the session it already holds instead of waiting for it
+to expire.
+
+### How it works
+
+Authorization Code flow with PKCE. The ID token comes straight from Google's
+token endpoint over TLS using our client secret, so per OpenID Connect it needs
+no signature check — but its issuer, audience, expiry and `email_verified` claim
+are all verified anyway, because those are what actually decide who gets in.
+
+Sessions are server-side rows in `admin_sessions`, for one reason: revocation.
+The cookie carries a random token and only its SHA-256 reaches the database, so
+a database leak does not hand anyone a working session. Sessions last 14 days.
+
+Approvals now record the moderator's actual email in `submissions.reviewed_by`.
+That is most of the point of moving off a shared login: "who approved this" has
+a real answer.
+
+### If sign-in breaks
+
+`POST /api/submissions/:id` with `ADMIN_API_TOKEN` is unaffected by any of this
+— it is a machine path with its own bearer token. Submissions can still be
+approved without a browser session, which makes it the break-glass route if the
+OAuth client is ever misconfigured.
+
 ### Abuse controls
 
 There are no accounts (out of scope for v1), so the public form leans on:
@@ -112,8 +163,12 @@ There are no accounts (out of scope for v1), so the public form leans on:
 - **Rate limit** — 5 submissions per hour per address, counted from the
   `submissions` table itself, so it survives restarts and needs no extra store.
   Only successful submissions count.
-- **CSRF** — Astro's origin check, on by default for server output.
-- **`ADMIN_API_TOKEN` unset means closed**, never open.
+- **CSRF** — Astro's origin check, on by default for server output. The OAuth
+  flow adds its own `state` check, compared in constant time, and `next=` is
+  restricted to `/admin` paths so a crafted link cannot bounce a moderator
+  off-site.
+- **Unset secrets mean closed**, never open — for `ADMIN_API_TOKEN` and for the
+  sign-in allowlist alike.
 
 The rate limit reads `X-Forwarded-For`, which is only trustworthy because
 Railway's edge sets it. If this app is ever exposed directly, that header
@@ -282,9 +337,9 @@ docker compose run --rm app npm run db:migrate
    against the series they claim, and let the paint chart be finished.
 2. **Image uploads** — deferred in the handoff, and the main thing owners will
    ask for once the registry has entries.
-3. **Real accounts**, whenever there is more than one moderator. Basic auth over
-   `/admin` and a shared bearer token are honest for one person and stop being
-   so for three.
+3. **Roles**, if moderation ever needs more than one tier. Every allowlisted
+   address currently has identical powers; that is fine for a small team and
+   stops being fine when club registrars are added alongside owners.
 
 Known follow-ups: fonts are loaded from Google Fonts and should be self-hosted
 before launch (privacy, and one less render-blocking third party); the club

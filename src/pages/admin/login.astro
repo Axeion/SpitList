@@ -1,0 +1,148 @@
+---
+import Base from '../../layouts/Base.astro';
+import { readOAuthConfig, readSession, SESSION_COOKIE } from '../../lib/auth';
+
+const config = readOAuthConfig();
+
+// Already signed in? Don't make them click through a login screen.
+if (config.ok) {
+  const session = await readSession(Astro.cookies.get(SESSION_COOKIE)?.value, config.config);
+  if (session) return Astro.redirect('/admin/submissions', 302);
+}
+
+const params = Astro.url.searchParams;
+const next = params.get('next') ?? '/admin/submissions';
+const signedOut = params.get('signed-out') === '1';
+const error = params.get('error');
+
+const MESSAGES: Record<string, string> = {
+  unconfigured: 'Sign-in is not configured on this deployment yet.',
+  denied: 'Sign-in was cancelled.',
+  expired: 'That sign-in attempt timed out. Try again.',
+  state: 'That sign-in could not be verified. Start again from this page.',
+  unverified: 'That Google account has an unverified email address.',
+  'not-allowed': 'That account is not on the moderator list.',
+};
+
+const message = error ? (MESSAGES[error] ?? error) : null;
+const startHref = `/admin/auth/start?next=${encodeURIComponent(next)}`;
+---
+
+<Base title="Sign in — Spitplate moderation">
+  <section class="login">
+    <div class="wrap">
+      <span class="section-tag">Moderation</span>
+      <h1>Sign in.</h1>
+
+      {signedOut && <p class="flash ok">Signed out.</p>}
+      {message && <p class="flash err" role="alert">{message}</p>}
+
+      {
+        config.ok ? (
+          <>
+            <p class="lede">
+              The moderation queue is limited to a short list of accounts. Everything
+              else on Spitplate is public.
+            </p>
+            <a class="btn" href={startHref}>Continue with Google</a>
+          </>
+        ) : (
+          <div class="setup">
+            <p class="lede">
+              Sign-in is not configured. These environment variables are missing:
+            </p>
+            <ul>
+              {config.missing.map((name) => (
+                <li class="mono">{name}</li>
+              ))}
+            </ul>
+            <p class="note">
+              Until they are set, nobody can reach the queue through a browser.
+              Submissions still arrive and can still be approved through
+              <code> POST /api/submissions/:id</code> with the admin token.
+            </p>
+          </div>
+        )
+      }
+    </div>
+  </section>
+</Base>
+
+<style>
+  .login {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 96px 0 120px;
+    min-height: 62vh;
+  }
+
+  .login .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .login h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    line-height: 1;
+    color: var(--parchment);
+  }
+
+  .lede {
+    font-size: 17.5px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 520px;
+    margin: 20px 0 30px;
+  }
+
+  .flash {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.04em;
+    padding: 10px 14px;
+    border-radius: 2px;
+    margin-top: 22px;
+    margin-bottom: 0;
+  }
+
+  .flash.ok {
+    border: 1px solid rgba(241, 231, 210, 0.3);
+    color: var(--chrome);
+  }
+
+  .flash.err {
+    border: 1px solid var(--signal-red);
+    background: rgba(165, 56, 42, 0.18);
+    color: #f0b9b1;
+  }
+
+  .setup ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 22px;
+  }
+
+  .setup li {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: var(--brass-bright);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line-on-dark);
+    max-width: 420px;
+  }
+
+  .note {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 560px;
+  }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+</style>

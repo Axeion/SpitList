@@ -5,12 +5,14 @@ import { approveSubmission, rejectSubmission } from '../../lib/submissions';
 import { formatDate } from '../../lib/site';
 
 /**
- * Moderation queue. Access is gated by Basic auth in src/middleware.ts.
+ * Moderation queue. Access is gated by Google sign-in in src/middleware.ts,
+ * which puts the signed-in moderator on Astro.locals.admin.
  *
  * Approve/reject post back to this page and call the same functions the n8n
  * callback uses, so both paths share one implementation — including the
  * transaction and the row lock that stop a double approval.
  */
+const admin = Astro.locals.admin;
 let flash: { kind: 'ok' | 'err'; message: string } | null = null;
 
 if (Astro.request.method === 'POST') {
@@ -18,8 +20,9 @@ if (Astro.request.method === 'POST') {
   const id = String(form.get('id') ?? '');
   const action = String(form.get('action') ?? '');
   const note = String(form.get('note') ?? '').trim() || null;
-  // Basic auth already identified them; record who acted.
-  const reviewer = process.env.ADMIN_USER ?? 'admin';
+  // Record the actual person, not a shared login. This is most of the point of
+  // moving off Basic auth: "who approved this" now has a real answer.
+  const reviewer = admin?.email ?? 'unknown';
 
   if (!id) {
     flash = { kind: 'err', message: 'Missing submission id.' };
@@ -66,6 +69,17 @@ const [pending, counts, recent] = await Promise.all([
       <p class="counts mono">
         {counts.approvedToday} approved · {counts.rejectedToday} rejected · last 24 hours
       </p>
+
+      {
+        admin && (
+          <div class="whoami">
+            <span class="mono">Signed in as {admin.displayName ?? admin.email}</span>
+            <form method="post" action="/admin/logout">
+              <button type="submit">Sign out</button>
+            </form>
+          </div>
+        )
+      }
     </div>
   </section>
 
@@ -221,6 +235,45 @@ const [pending, counts, recent] = await Promise.all([
     text-transform: uppercase;
     color: var(--chrome);
     margin-top: 14px;
+  }
+
+  .whoami {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .whoami span {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--chrome);
+  }
+
+  .whoami form {
+    margin: 0;
+  }
+
+  .whoami button {
+    background: none;
+    border: 1px solid rgba(241, 231, 210, 0.3);
+    border-radius: 2px;
+    color: var(--parchment);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+
+  .whoami button:hover {
+    border-color: var(--brass-bright);
+    color: var(--brass-bright);
   }
 
   .admin-body {
