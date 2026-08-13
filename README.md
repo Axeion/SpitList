@@ -41,11 +41,18 @@ worse than one that visibly fails.
 ## Submission and moderation flow
 
 ```
-visitor → POST /submit ──→ submissions (status=pending) ──→ n8n webhook → Discord card
-                                                                              │
-                              cars ←── POST /api/submissions/:id ←────────────┘
-                                        {"action":"approve"|"reject"}
+visitor → POST /submit ──→ submissions (status=pending) ──→ n8n → Discord #spitfire card
+                                                                        │
+                                                                        ▼
+                              cars ←── approve/reject ←── /admin/submissions
+                                   ←── POST /api/submissions/:id (n8n / scripted)
 ```
+
+A moderator reviews in `/admin/submissions`. The Discord card is a notification
+with a link, not an approval control: Discord buttons need a registered
+application with a public interactions endpoint doing signature verification,
+and approve-by-link is unsafe because Discord unfurls links — a card could
+approve a car just by being posted.
 
 A submission is a *proposal*, never a direct write. If the chassis number is
 already registered the submission is filed as an `update` against that car
@@ -67,8 +74,29 @@ curl -X POST https://spitplate.com/api/submissions/$ID \
 Responses: `200` approved/rejected · `401` bad token · `404` unknown id ·
 `409` already reviewed, or chassis conflict · `503` `ADMIN_API_TOKEN` unset.
 
-> n8n must send `content-type: application/json`. Astro's CSRF origin check
-> treats a form-encoded cross-origin POST as an attack and returns `403`.
+> Any caller must send `content-type: application/json`. Astro's CSRF origin
+> check treats a form-encoded cross-origin POST as an attack and returns `403`.
+
+### The n8n workflow
+
+**Spitplate — New Submission to Discord** (`6FQlc4HvEuTeOy8a`), published.
+
+```
+Webhook (POST /spitplate/submission)
+  → Normalize Submission   (flatten body, drop everything not needed)
+  → Compose Review Card    (title, colour, markdown description)
+  → Post Review Card       (Discord #spitfire)
+```
+
+Set `N8N_SUBMISSION_WEBHOOK_URL` to the production webhook URL from the n8n
+workflow's trigger node. The app fires it and forgets — a webhook outage never
+fails a submission, and the entry still lands in the queue.
+
+The card carries the chassis number, model, year, the ref being corrected, the
+submitter's name and note, and a link to the queue. It deliberately does **not**
+carry the submitter's email — only a "contact on file" flag. The address itself
+stays behind the admin login rather than being copied into a chat log. The
+normalizing step drops it, so it cannot leak even if the card template changes.
 
 ### Abuse controls
 
