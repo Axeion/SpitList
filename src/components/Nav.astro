@@ -1,5 +1,16 @@
 ---
 import { NAV_LINKS, SITE } from '../lib/site';
+
+const path = Astro.url.pathname;
+
+/**
+ * Section anchors on the home page ('/#stats') never count as "current" — only
+ * real routes do, so /registry and /reference light up and the anchors don't.
+ */
+const isCurrent = (href: string) => {
+  if (href.includes('#')) return false;
+  return path === href || path.startsWith(`${href}/`);
+};
 ---
 
 <header class="nav">
@@ -17,13 +28,67 @@ import { NAV_LINKS, SITE } from '../lib/site';
     </a>
 
     <nav class="links" aria-label="Primary">
-      {NAV_LINKS.map((link) => <a href={link.href}>{link.label}</a>)}
+      {
+        NAV_LINKS.map((link) => (
+          <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+            {link.label}
+          </a>
+        ))
+      }
       <a href="/submit" class="nav-cta">Add Your Car</a>
     </nav>
 
-    <a class="menu-link" href="/submit">Add Your Car</a>
+    {/*
+      A <details> rather than a scripted panel: it opens, closes and takes
+      keyboard focus with no JavaScript at all, and the browser manages the
+      expanded state. The script below only adds the niceties — Escape, closing
+      on outside click, and closing when a same-page anchor is followed.
+    */}
+    <details class="menu" id="mobile-menu">
+      <summary>
+        <span class="bars" aria-hidden="true"></span>
+        <span class="menu-word">Menu</span>
+      </summary>
+
+      <nav class="menu-panel" aria-label="Primary">
+        <a href="/submit" class="panel-cta">Add Your Car</a>
+        {
+          NAV_LINKS.map((link) => (
+            <a href={link.href} aria-current={isCurrent(link.href) ? 'page' : undefined}>
+              {link.label}
+            </a>
+          ))
+        }
+        <a href="/for-clubs">For Clubs</a>
+      </nav>
+    </details>
   </div>
 </header>
+
+<script>
+  const menu = document.getElementById('mobile-menu') as HTMLDetailsElement | null;
+
+  if (menu) {
+    const close = () => menu.removeAttribute('open');
+
+    // Following a link on the current page (a '#stats' anchor, say) leaves the
+    // panel sitting open over the thing it just scrolled to.
+    menu.querySelector('.menu-panel')?.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('a')) close();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && menu.open) {
+        close();
+        menu.querySelector('summary')?.focus();
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target as Node)) close();
+    });
+  }
+</script>
 
 <style>
   .nav {
@@ -50,6 +115,7 @@ import { NAV_LINKS, SITE } from '../lib/site';
     gap: 12px;
     color: var(--parchment);
     text-decoration: none;
+    min-width: 0;
   }
 
   .brand svg {
@@ -77,6 +143,7 @@ import { NAV_LINKS, SITE } from '../lib/site';
     letter-spacing: 0.14em;
     color: var(--brass-bright);
     text-transform: uppercase;
+    white-space: nowrap;
   }
 
   .links {
@@ -102,8 +169,12 @@ import { NAV_LINKS, SITE } from '../lib/site';
     border-color: var(--brass-bright);
   }
 
-  .nav-cta,
-  .menu-link {
+  .links a[aria-current='page'] {
+    opacity: 1;
+    border-color: var(--brass-bright);
+  }
+
+  .nav-cta {
     background: var(--brass);
     color: var(--racing-green) !important;
     padding: 9px 16px !important;
@@ -111,23 +182,143 @@ import { NAV_LINKS, SITE } from '../lib/site';
     font-weight: 600;
     opacity: 1 !important;
     border: none !important;
-    text-decoration: none;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
   }
 
-  .nav-cta:hover,
-  .menu-link:hover {
+  .nav-cta:hover {
     background: var(--brass-bright);
   }
 
-  /* The concept had a hamburger that opened nothing. Below the breakpoint the
-     nav collapses to the one action that matters; the rest of the page is a
-     single scroll anyway. */
-  .menu-link {
+  /* ---------- mobile menu ---------- */
+
+  .menu {
     display: none;
+    position: relative;
+  }
+
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 14px;
+    border: 1px solid var(--line-on-dark);
+    border-radius: 2px;
+    color: var(--parchment);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  /* Both are needed: WebKit uses its own pseudo-element for the marker. */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  summary::marker {
+    content: '';
+  }
+
+  summary:hover {
+    border-color: var(--brass-bright);
+  }
+
+  .bars {
+    position: relative;
+    width: 16px;
+    height: 2px;
+    background: var(--brass-bright);
+    transition: background 0.15s ease;
+  }
+
+  .bars::before,
+  .bars::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    width: 16px;
+    height: 2px;
+    background: var(--brass-bright);
+    transition: transform 0.18s ease;
+  }
+
+  .bars::before {
+    top: -5px;
+  }
+
+  .bars::after {
+    top: 5px;
+  }
+
+  /* Open state: the bars fold into a cross. */
+  .menu[open] .bars {
+    background: transparent;
+  }
+
+  .menu[open] .bars::before {
+    transform: translateY(5px) rotate(45deg);
+  }
+
+  .menu[open] .bars::after {
+    transform: translateY(-5px) rotate(-45deg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bars,
+    .bars::before,
+    .bars::after {
+      transition: none;
+    }
+  }
+
+  .menu-panel {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    min-width: 232px;
+    display: flex;
+    flex-direction: column;
+    background: var(--racing-green-2);
+    border: 1px solid var(--line-on-dark);
+    border-radius: 3px;
+    box-shadow: 0 26px 50px -22px rgba(0, 0, 0, 0.75);
+    padding: 8px;
+    z-index: 60;
+  }
+
+  .menu-panel a {
+    color: var(--parchment);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 13px 14px;
+    border-radius: 2px;
+  }
+
+  .menu-panel a:hover,
+  .menu-panel a:focus-visible {
+    background: rgba(241, 231, 210, 0.08);
+  }
+
+  .menu-panel a[aria-current='page'] {
+    color: var(--brass-bright);
+    background: rgba(214, 168, 98, 0.1);
+  }
+
+  .panel-cta {
+    background: var(--brass);
+    color: var(--racing-green) !important;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+
+  .panel-cta:hover {
+    background: var(--brass-bright) !important;
   }
 
   @media (max-width: 860px) {
@@ -135,8 +326,21 @@ import { NAV_LINKS, SITE } from '../lib/site';
       display: none;
     }
 
-    .menu-link {
-      display: inline-block;
+    .menu {
+      display: block;
+    }
+  }
+
+  /* The tagline is the first thing to go when the bar gets tight. Dropped
+     across the whole phone range rather than only the narrowest: at 390px it
+     wrapped to two lines and pushed the sticky header taller on every page. */
+  @media (max-width: 460px) {
+    .navbar {
+      padding: 14px 20px;
+    }
+
+    .brand-text .k2 {
+      display: none;
     }
   }
 </style>
