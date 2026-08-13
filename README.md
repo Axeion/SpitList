@@ -4,7 +4,8 @@ An independent registry of surviving Triumph Spitfires, logged by commission and
 VIN number.
 
 **Domain:** spitplate.com (registered, not yet live)
-**Status:** repo scaffolded; home page renders live from Postgres.
+**Status:** home, registry browse/search, and the submission + moderation flow
+all run live against Postgres.
 
 > Spitplate is a new, independently-branded project. It is **not** a fork,
 > rehost, or continuation of the International Triumph Spitfire Database at
@@ -24,6 +25,68 @@ Without a reachable database the page returns a 500 rather than rendering
 zeroes — a registry that silently shows an empty count when Postgres is down is
 worse than one that visibly fails.
 
+## Routes
+
+| Route | What it does |
+| --- | --- |
+| `/` | Home. Live stats, odometer, era cards. |
+| `/registry` | Browse and search. Filter by chassis number, era, series, country, year, modified, archived. |
+| `/registry/results` | htmx fragment for the same query. Same component as `/registry`, so the two cannot disagree. |
+| `/registry/:ref` | One car. `SP-00042`. |
+| `/submit` | Public add/correct form (GET renders, POST files). |
+| `/submit/thanks` | Post/Redirect/Get landing, so a refresh doesn't file twice. |
+| `/api/submissions/:id` | Moderation callback for n8n. Bearer auth. |
+| `/health` | DB ping. 200 `ok` / 503 `degraded`. |
+
+## Submission and moderation flow
+
+```
+visitor → POST /submit ──→ submissions (status=pending) ──→ n8n webhook → Discord card
+                                                                              │
+                              cars ←── POST /api/submissions/:id ←────────────┘
+                                        {"action":"approve"|"reject"}
+```
+
+A submission is a *proposal*, never a direct write. If the chassis number is
+already registered the submission is filed as an `update` against that car
+rather than a duplicate `create` — that is what makes "anyone can file a
+correction" safe: nothing is overwritten until a moderator approves it.
+
+**Approving** applies the payload to `cars` inside one transaction, with the
+pending row locked, so two moderators hitting approve at the same moment cannot
+both apply it. A create whose chassis number got registered while it sat in the
+queue returns `409` rather than corrupting anything.
+
+```bash
+curl -X POST https://spitplate.com/api/submissions/$ID \
+  -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"approve","reviewer":"dalton"}'
+```
+
+Responses: `200` approved/rejected · `401` bad token · `404` unknown id ·
+`409` already reviewed, or chassis conflict · `503` `ADMIN_API_TOKEN` unset.
+
+> n8n must send `content-type: application/json`. Astro's CSRF origin check
+> treats a form-encoded cross-origin POST as an attack and returns `403`.
+
+### Abuse controls
+
+There are no accounts (out of scope for v1), so the public form leans on:
+
+- **Honeypot** — a hidden `website` field. Filled means bot: the request gets a
+  normal thank-you page and is silently discarded. Telling a bot it failed only
+  teaches it to retry.
+- **Rate limit** — 5 submissions per hour per address, counted from the
+  `submissions` table itself, so it survives restarts and needs no extra store.
+  Only successful submissions count.
+- **CSRF** — Astro's origin check, on by default for server output.
+- **`ADMIN_API_TOKEN` unset means closed**, never open.
+
+The rate limit reads `X-Forwarded-For`, which is only trustworthy because
+Railway's edge sets it. If this app is ever exposed directly, that header
+becomes attacker-controlled and the limit becomes decorative.
+
 ## Scripts
 
 | Command | Does |
@@ -38,8 +101,8 @@ worse than one that visibly fails.
 
 ## Stack
 
-Astro 5+ in SSR mode (`@astrojs/node` standalone) over Postgres, with plain SQL
-migrations. Reasoning, alternatives considered, and the client-JS budget are in
+Astro in SSR mode (`@astrojs/node` standalone) over Postgres, with plain SQL
+migrations and htmx for the registry filters. Reasoning, alternatives considered, and the client-JS budget are in
 [`docs/stack-decision.md`](docs/stack-decision.md).
 
 ```
@@ -48,7 +111,7 @@ src/
   layouts/      Base.astro — head, nav, footer, scroll-reveal
   lib/          db.ts (pool), registry.ts (queries), site.ts (constants)
   data/         static club and resource lists
-  pages/        index.astro
+  pages/        index, registry/, submit/, api/, health
 db/
   migrations/   numbered .sql, applied in order, tracked in schema_migrations
   seed/         reference data
@@ -133,22 +196,22 @@ docker compose run --rm app npm run db:migrate
 
 ## Next
 
-In roughly the order the handoff calls for:
-
-1. **Registry browse and search** — filter by era, series, chassis number, year,
-   and (where published) location. This is where htmx arrives.
-2. **Submission flow** — public add/update form writing to `submissions`, with
-   the n8n webhook (`N8N_SUBMISSION_WEBHOOK_URL`) firing a Discord approval
-   card on insert.
-3. **Admin moderation view** — review the queue, apply an approved submission to
-   `cars`.
-4. **Reference pages** — VIN and commission-number decoders, paint codes, as
+1. **Admin moderation view** — a web queue at `/admin/submissions`. The
+   approve/reject write path already exists and is what n8n calls; this is a
+   human-facing surface over the same functions, and the first thing here that
+   will need real auth rather than a shared token.
+2. **Reference pages** — VIN and commission-number decoders, paint codes, as
    markdown content collections.
+3. **Sourcing real serial ranges** for `chassis_series`, currently NULL on
+   purpose.
+4. **Image uploads** — deferred in the handoff, and the main thing owners will
+   ask for once the registry has entries.
 
 Known follow-ups: fonts are loaded from Google Fonts and should be self-hosted
 before launch (privacy, and one less render-blocking third party); the club
 directory has unverified links, which render as plain text rather than dead
-links until confirmed.
+links until confirmed; registry search uses a substring `LIKE`, which is a
+sequential scan — fine at this size, wants `pg_trgm` if the table grows.
 
 ## Design
 

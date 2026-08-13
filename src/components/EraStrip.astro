@@ -48,17 +48,13 @@ const MARKET_LABELS: Record<string, string> = {
               <span>Registered</span>
               <b>{formatInt(era.registered)}</b>
             </div>
-            <a class="era-link" href="#stats">
-              See the numbers <span aria-hidden="true">→</span>
+            <a class="era-link" href={`/registry?era=${era.code}`}>
+              View {era.shortLabel} cars <span aria-hidden="true">→</span>
             </a>
           </article>
         ))
       }
     </div>
-
-    <p class="strip-note mono reveal">
-      Per-car browse and search arrive with the registry release.
-    </p>
 
     <div class="cards3" style="margin-top:26px;">
       {

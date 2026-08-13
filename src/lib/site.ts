@@ -20,12 +20,14 @@ export const SITE = {
  */
 export const SURVIVAL_ESTIMATE_PCT = 20;
 
+// Absolute rather than bare hashes: these render on every page, and '#stats'
+// from /registry would go nowhere.
 export const NAV_LINKS = [
-  { href: '#registry', label: 'Registry' },
-  { href: '#history', label: 'History' },
-  { href: '#stats', label: 'Stats' },
-  { href: '#clubs', label: 'Clubs' },
-  { href: '#resources', label: 'Resources' },
+  { href: '/registry', label: 'Registry' },
+  { href: '/#history', label: 'History' },
+  { href: '/#stats', label: 'Stats' },
+  { href: '/#clubs', label: 'Clubs' },
+  { href: '/#resources', label: 'Resources' },
 ] as const;
 
 export const formatInt = (n: number) => n.toLocaleString('en-US');

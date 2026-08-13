@@ -1,0 +1,262 @@
+---
+import type { SearchFilters, FilterOptions } from '../../lib/registry';
+import { hasAnyFilter } from '../../lib/filters';
+
+interface Props {
+  filters: SearchFilters;
+  options: FilterOptions;
+}
+
+const { filters, options } = Astro.props;
+const active = hasAnyFilter(filters);
+---
+
+{/*
+  Plain GET form: without JavaScript it navigates to /registry and renders the
+  full page. htmx upgrades it in place — same query, same component, same markup.
+
+  The address bar is updated by the HX-Push-Url header the partial sends back,
+  which carries the /registry URL. Pushing the request URL instead would leave
+  /registry/results in history, and reloading that gives a bare fragment with
+  no page around it.
+*/}
+<form
+  class="filters"
+  method="get"
+  action="/registry"
+  hx-get="/registry/results"
+  hx-target="#results"
+  hx-swap="outerHTML"
+  hx-indicator="#filter-busy"
+  hx-trigger="submit, change, input changed delay:400ms from:input[name='q']"
+>
+  <div class="field field-wide">
+    <label for="f-q">Chassis or commission number</label>
+    <input
+      type="search"
+      id="f-q"
+      name="q"
+      value={filters.q ?? ''}
+      placeholder="FH45231 or 45231"
+      autocomplete="off"
+    />
+  </div>
+
+  <div class="field">
+    <label for="f-era">Model</label>
+    <select id="f-era" name="era">
+      <option value="">All models</option>
+      {
+        options.eras.map((era) => (
+          <option value={era.code} selected={filters.era === era.code}>
+            {era.label} — {era.name}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="f-series">Series</label>
+    <select id="f-series" name="series">
+      <option value="">All series</option>
+      {
+        options.series.map((series) => (
+          <option value={series.id} selected={filters.series === series.id}>
+            {series.label}
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="f-country">Country</label>
+    <select id="f-country" name="country">
+      <option value="">Anywhere</option>
+      {
+        options.countries.map((country) => (
+          <option value={country.code} selected={filters.country === country.code}>
+            {country.code} ({country.count})
+          </option>
+        ))
+      }
+    </select>
+  </div>
+
+  <div class="field field-years">
+    <span class="label-text" id="year-label">Year</span>
+    <div class="year-inputs" role="group" aria-labelledby="year-label">
+      <input
+        type="number"
+        name="year_from"
+        value={filters.yearFrom ?? ''}
+        min={options.yearRange.min}
+        max={options.yearRange.max}
+        placeholder={String(options.yearRange.min)}
+        aria-label="Year from"
+      />
+      <span aria-hidden="true">–</span>
+      <input
+        type="number"
+        name="year_to"
+        value={filters.yearTo ?? ''}
+        min={options.yearRange.min}
+        max={options.yearRange.max}
+        placeholder={String(options.yearRange.max)}
+        aria-label="Year to"
+      />
+    </div>
+  </div>
+
+  <div class="field field-checks">
+    <label class="check">
+      <input type="checkbox" name="modified" value="1" checked={filters.modifiedOnly} />
+      <span>Modified only</span>
+    </label>
+    <label class="check">
+      <input type="checkbox" name="archived" value="1" checked={filters.includeArchived} />
+      <span>Include archived</span>
+    </label>
+  </div>
+
+  <div class="field field-actions">
+    <button type="submit" class="btn">Search</button>
+    {active && <a class="clear" href="/registry">Clear</a>}
+    <span id="filter-busy" class="busy mono" aria-hidden="true">Searching…</span>
+  </div>
+
+  {/* Paging resets whenever a filter changes. */}
+  <input type="hidden" name="page" value="1" />
+</form>
+
+<style>
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px 18px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    margin-bottom: 28px;
+  }
+
+  @media (max-width: 900px) {
+    .filters {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .filters {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .field-wide {
+    grid-column: span 2;
+  }
+
+  @media (max-width: 560px) {
+    .field-wide {
+      grid-column: span 1;
+    }
+  }
+
+  label,
+  .label-text {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  input[type='search'],
+  input[type='number'],
+  select {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+    min-width: 0;
+  }
+
+  input:focus,
+  select:focus {
+    outline: 2px solid var(--brass);
+    outline-offset: -1px;
+  }
+
+  .year-inputs {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .year-inputs span {
+    color: var(--ink-mute);
+  }
+
+  .field-checks {
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 12px;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+
+  .check input {
+    accent-color: var(--racing-green);
+    width: 15px;
+    height: 15px;
+  }
+
+  .field-actions {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .clear {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--signal-red);
+  }
+
+  /* htmx toggles .htmx-request on the form during a fetch. */
+  .busy {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .filters.htmx-request .busy {
+    opacity: 1;
+  }
+</style>

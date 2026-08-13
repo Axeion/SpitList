@@ -139,7 +139,8 @@ try {
 
       n += 1;
       rows.push({
-        public_ref: `SP-${String(n).padStart(5, '0')}`,
+        // public_ref comes from the car_public_ref_seq default, same as a real
+        // submission, so seeded and submitted refs can never collide.
         era_code: eraCode,
         series_id: seriesId,
         chassis_number: isVin ? number : `${prefix} ${serial}${suffix ? ` ${suffix}` : ''}`,

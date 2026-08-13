@@ -110,10 +110,24 @@ the join is a sequential scan over a few thousand rows. Revisit if that changes.
 The generator sets locations and visibility flags but **never invents an owner
 name**, so no fictional person can ever appear in the registry.
 
+## Reading the registry
+
+Every public query lives in `src/lib/registry.ts`, behind a single privacy
+boundary. Owner identity is resolved once, there:
+
+- `owner_name` only when `show_owner_name`
+- location fields only when `show_location`
+- `contact_email` is never selected at all
+
+Country filtering is gated on `show_location` too — filtering on a hidden
+location would leak it by inference. There is deliberately no "raw car" query
+for public pages: if a field needs exposing, it gets exposed in that module or
+not at all.
+
 ## Still to build
 
-- Applying an approved submission to `cars` (the write path).
-- Full-text / trigram search across chassis numbers and notes. There is a
-  `text_pattern_ops` index for prefix matching now; `pg_trgm` if fuzzy matching
-  is wanted later.
+- Full-text / trigram search across chassis numbers and notes. Search is a
+  substring `LIKE` today — a sequential scan, fine at this size. There is a
+  `text_pattern_ops` index for prefix matching; `pg_trgm` if fuzzy matching is
+  wanted later.
 - Sourcing real serial ranges for `chassis_series`.

@@ -1,0 +1,425 @@
+---
+import type { FilterOptions } from '../lib/registry';
+
+interface Props {
+  options: FilterOptions;
+  errors?: Record<string, string>;
+  values?: Record<string, string>;
+  prefillChassis?: string;
+}
+
+const { options, errors = {}, values = {}, prefillChassis = '' } = Astro.props;
+
+const val = (name: string, fallback = '') => values[name] ?? fallback;
+const checked = (name: string) => values[name] === 'on' || values[name] === '1';
+const err = (name: string) => errors[name];
+---
+
+<form class="submit-form" method="post" action="/submit" novalidate>
+  {
+    Object.keys(errors).length > 0 && (
+      <div class="form-error" role="alert">
+        <b>That didn't go through.</b> Check the highlighted fields below — nothing
+        was lost, your answers are still here.
+      </div>
+    )
+  }
+
+  <fieldset>
+    <legend>The car</legend>
+
+    <div class="grid">
+      <div class="field field-wide">
+        <label for="chassis_number">
+          Chassis or commission number <span class="req">required</span>
+        </label>
+        <input
+          type="text"
+          id="chassis_number"
+          name="chassis_number"
+          value={val('chassis_number', prefillChassis)}
+          placeholder="FH 45231 L"
+          aria-describedby="chassis-help"
+          aria-invalid={err('chassis_number') ? 'true' : undefined}
+          required
+        />
+        <p class="help" id="chassis-help">
+          Stamped on the commission plate. Spaces and punctuation don't matter.
+          If this number is already registered, your entry becomes a correction to
+          the existing one rather than a duplicate.
+        </p>
+        {err('chassis_number') && <p class="err">{err('chassis_number')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="era_code">Model <span class="req">required</span></label>
+        <select id="era_code" name="era_code" aria-invalid={err('era_code') ? 'true' : undefined} required>
+          <option value="">Choose…</option>
+          {
+            options.eras.map((era) => (
+              <option value={era.code} selected={val('era_code') === era.code}>
+                {era.label} — {era.name}
+              </option>
+            ))
+          }
+        </select>
+        {err('era_code') && <p class="err">{err('era_code')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="series_id">Series</label>
+        <select id="series_id" name="series_id">
+          <option value="">Not sure</option>
+          {
+            options.series.map((series) => (
+              <option value={series.id} selected={val('series_id') === series.id}>
+                {series.label}
+              </option>
+            ))
+          }
+        </select>
+        <p class="help">Dropped automatically if it doesn't match the model.</p>
+      </div>
+
+      <div class="field">
+        <label for="model_year">Model year</label>
+        <input type="number" id="model_year" name="model_year" value={val('model_year')} placeholder="1972" />
+        {err('model_year') && <p class="err">{err('model_year')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="build_year">Build year</label>
+        <input type="number" id="build_year" name="build_year" value={val('build_year')} placeholder="1971" />
+        {err('build_year') && <p class="err">{err('build_year')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="first_registered_on">First registered</label>
+        <input
+          type="date"
+          id="first_registered_on"
+          name="first_registered_on"
+          value={val('first_registered_on')}
+        />
+        <p class="help">Where this disagrees with the build date, this one wins.</p>
+        {err('first_registered_on') && <p class="err">{err('first_registered_on')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="engine_cc">Engine (cc)</label>
+        <input type="number" id="engine_cc" name="engine_cc" value={val('engine_cc')} placeholder="1296" />
+        {err('engine_cc') && <p class="err">{err('engine_cc')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="engine_number">Engine number</label>
+        <input type="text" id="engine_number" name="engine_number" value={val('engine_number')} />
+      </div>
+
+      <div class="field">
+        <label for="colour">Colour</label>
+        <input type="text" id="colour" name="colour" value={val('colour')} placeholder="Signal Red" />
+      </div>
+
+      <div class="field">
+        <label for="colour_code">Paint code</label>
+        <input type="text" id="colour_code" name="colour_code" value={val('colour_code')} placeholder="32" />
+      </div>
+    </div>
+
+    <label class="check">
+      <input type="checkbox" name="plate_missing" checked={checked('plate_missing')} />
+      <span>
+        The commission plate is missing
+        <small>Cars without their original number are archived rather than counted as survivors.</small>
+      </span>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" name="is_modified" checked={checked('is_modified')} />
+      <span>
+        Modified from standard
+        <small>Engine swaps and conversions still count, as long as the plate is there.</small>
+      </span>
+    </label>
+
+    <div class="field">
+      <label for="modification_notes">Modification notes</label>
+      <textarea id="modification_notes" name="modification_notes" rows="2">{val('modification_notes')}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="notes">History</label>
+      <textarea id="notes" name="notes" rows="4" placeholder="Anything you know — restoration work, previous owners, how long you've had it.">{val('notes')}</textarea>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>You</legend>
+
+    <p class="privacy-lede">
+      All of this is optional, and all of it stays private unless you tick the
+      boxes below. Your email is never published under any setting — it is only
+      there so a moderator can ask a question.
+    </p>
+
+    <div class="grid">
+      <div class="field">
+        <label for="owner_name">Your name</label>
+        <input type="text" id="owner_name" name="owner_name" value={val('owner_name')} />
+      </div>
+
+      <div class="field">
+        <label for="submitter_email">Email</label>
+        <input
+          type="email"
+          id="submitter_email"
+          name="submitter_email"
+          value={val('submitter_email')}
+          aria-invalid={err('submitter_email') ? 'true' : undefined}
+        />
+        {err('submitter_email') && <p class="err">{err('submitter_email')}</p>}
+      </div>
+
+      <div class="field">
+        <label for="owner_city">Town / city</label>
+        <input type="text" id="owner_city" name="owner_city" value={val('owner_city')} />
+      </div>
+
+      <div class="field">
+        <label for="owner_region">Region / state</label>
+        <input type="text" id="owner_region" name="owner_region" value={val('owner_region')} />
+      </div>
+
+      <div class="field">
+        <label for="owner_country">Country code</label>
+        <input
+          type="text"
+          id="owner_country"
+          name="owner_country"
+          value={val('owner_country')}
+          maxlength="2"
+          placeholder="GB"
+          aria-invalid={err('owner_country') ? 'true' : undefined}
+        />
+        {err('owner_country') && <p class="err">{err('owner_country')}</p>}
+      </div>
+    </div>
+
+    <label class="check">
+      <input type="checkbox" name="show_owner_name" checked={checked('show_owner_name')} />
+      <span>Publish my name on the entry</span>
+    </label>
+
+    <label class="check">
+      <input type="checkbox" name="show_location" checked={checked('show_location')} />
+      <span>Publish my location on the entry</span>
+    </label>
+
+    <div class="field">
+      <label for="submitter_note">Note to the moderators</label>
+      <textarea id="submitter_note" name="submitter_note" rows="2">{val('submitter_note')}</textarea>
+      <p class="help">Not published. Useful for corrections — tell us what's wrong and how you know.</p>
+    </div>
+  </fieldset>
+
+  {/*
+    Honeypot. Real people never see this; bots fill every field they find.
+    Hidden with CSS rather than type=hidden so naive scripts still populate it.
+  */}
+  <div class="hp" aria-hidden="true">
+    <label for="website">Website</label>
+    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+  </div>
+
+  <div class="actions">
+    <button type="submit" class="btn">Submit for review</button>
+    <p class="actions-note">
+      Nothing goes live until a moderator has looked at it.
+    </p>
+  </div>
+</form>
+
+<style>
+  .submit-form {
+    max-width: 780px;
+  }
+
+  fieldset {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 28px;
+    margin: 0 0 26px;
+    background: var(--card);
+  }
+
+  legend {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    font-size: 22px;
+    font-weight: 800;
+    padding: 0 10px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+
+  @media (max-width: 620px) {
+    .grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .field-wide {
+    grid-column: 1 / -1;
+  }
+
+  label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  .req {
+    color: var(--signal-red);
+    margin-left: 6px;
+  }
+
+  input[type='text'],
+  input[type='number'],
+  input[type='email'],
+  input[type='date'],
+  select,
+  textarea {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    background: #fff;
+    color: var(--ink);
+    width: 100%;
+    min-width: 0;
+  }
+
+  textarea {
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    resize: vertical;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid var(--brass);
+    outline-offset: -1px;
+  }
+
+  [aria-invalid='true'] {
+    border-color: var(--signal-red);
+    background: rgba(165, 56, 42, 0.04);
+  }
+
+  .help {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+
+  .err {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    color: var(--signal-red);
+    margin: 0;
+  }
+
+  .form-error {
+    border: 1px solid var(--signal-red);
+    background: rgba(165, 56, 42, 0.07);
+    border-radius: 3px;
+    padding: 16px 18px;
+    margin-bottom: 24px;
+    font-size: 15px;
+    color: var(--ink);
+  }
+
+  .privacy-lede {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin: 0 0 20px;
+    padding-left: 14px;
+    border-left: 3px solid var(--brass);
+  }
+
+  .check {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 18px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-family: var(--font-body);
+    font-size: 15px;
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .check input {
+    accent-color: var(--racing-green);
+    width: 16px;
+    height: 16px;
+    margin-top: 2px;
+    flex: none;
+  }
+
+  .check small {
+    display: block;
+    font-size: 13px;
+    color: var(--ink-mute);
+    margin-top: 3px;
+  }
+
+  .check + .field {
+    margin-top: 18px;
+  }
+
+  /* Honeypot: off-screen, not display:none, so bots still fill it. */
+  .hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .actions-note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0;
+  }
+</style>

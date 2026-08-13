@@ -1,0 +1,143 @@
+---
+import Base from '../../layouts/Base.astro';
+import SubmitForm from '../../components/SubmitForm.astro';
+import { getFilterOptions } from '../../lib/registry';
+import { validateSubmission } from '../../lib/validation';
+import { createSubmission, recentSubmissionCount } from '../../lib/submissions';
+import { notifyNewSubmission } from '../../lib/notify';
+import { clientIp } from '../../lib/request';
+
+const MAX_PER_HOUR = 5;
+
+let errors: Record<string, string> = {};
+let values: Record<string, string> = {};
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+
+  // Honeypot. Accept the request, discard it, and say thank you — telling a bot
+  // it failed just teaches it to try again.
+  const honeypot = form.get('website');
+  if (typeof honeypot === 'string' && honeypot.trim() !== '') {
+    return Astro.redirect('/submit/thanks', 303);
+  }
+
+  const ip = clientIp(Astro.request, Astro.clientAddress);
+
+  if ((await recentSubmissionCount(ip)) >= MAX_PER_HOUR) {
+    errors = {
+      _form: `That's ${MAX_PER_HOUR} submissions in an hour from this connection. Give it a little while, or email us if you have a batch to add.`,
+    };
+  } else {
+    const options = await getFilterOptions();
+    const seriesByEra: Record<string, string[]> = {};
+    for (const series of options.series) {
+      (seriesByEra[series.eraCode] ??= []).push(series.id);
+    }
+
+    const result = validateSubmission(form, {
+      eraCodes: options.eras.map((e) => e.code),
+      seriesByEra,
+    });
+
+    if (result.ok) {
+      const submission = await createSubmission(result.payload, result.meta, {
+        ip,
+        userAgent: Astro.request.headers.get('user-agent'),
+      });
+
+      notifyNewSubmission(submission, result.payload, result.meta, Astro.url.origin);
+
+      // Post/Redirect/Get, so a refresh doesn't file the car twice.
+      const query = new URLSearchParams({ kind: submission.kind });
+      if (submission.targetPublicRef) query.set('ref', submission.targetPublicRef);
+      return Astro.redirect(`/submit/thanks?${query}`, 303);
+    }
+
+    errors = result.errors;
+  }
+
+  // Re-render with what they typed, so nothing is retyped after an error.
+  for (const [key, value] of form.entries()) {
+    if (typeof value === 'string' && key !== 'website') values[key] = value;
+  }
+}
+
+const options = await getFilterOptions();
+const prefillChassis = Astro.url.searchParams.get('chassis') ?? '';
+---
+
+<Base
+  title="Add your car — Spitplate"
+  description="Submit a Triumph Spitfire to the Spitplate registry, or file a correction to an existing entry."
+>
+  <section class="submit-head">
+    <div class="wrap">
+      <span class="section-tag">Add or correct an entry</span>
+      <h1>{prefillChassis ? 'File a correction.' : 'Get it on the books.'}</h1>
+      <p>
+        Chassis number and model are the only things we really need. Everything
+        else helps, and anything you leave out can be filled in later.
+      </p>
+    </div>
+  </section>
+
+  <section class="section submit-body">
+    <div class="wrap">
+      {
+        errors._form && (
+          <div class="rate-limit" role="alert">
+            {errors._form}
+          </div>
+        )
+      }
+      <SubmitForm
+        options={options}
+        errors={errors}
+        values={values}
+        prefillChassis={prefillChassis}
+      />
+    </div>
+  </section>
+</Base>
+
+<style>
+  .submit-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 64px 0 56px;
+  }
+
+  .submit-head .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .submit-head h1 {
+    font-size: clamp(32px, 5vw, 58px);
+    line-height: 1;
+    color: var(--parchment);
+  }
+
+  .submit-head p {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 560px;
+    margin-top: 18px;
+  }
+
+  .submit-body {
+    padding: 48px 0 88px;
+  }
+
+  .rate-limit {
+    max-width: 780px;
+    border: 1px solid var(--signal-red);
+    background: rgba(165, 56, 42, 0.07);
+    border-radius: 3px;
+    padding: 18px 20px;
+    margin-bottom: 26px;
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+</style>

@@ -1,0 +1,269 @@
+---
+import { formatInt } from '../../lib/site';
+import { buildQuery } from '../../lib/filters';
+import type { SearchFilters, SearchResult } from '../../lib/registry';
+
+interface Props {
+  result: SearchResult;
+  filters: SearchFilters;
+}
+
+const { result, filters } = Astro.props;
+const { cars, total, page, pageCount } = result;
+
+const pageHref = (n: number) => `/registry${buildQuery(filters, { page: n })}`;
+
+// Window of page links around the current page.
+const windowSize = 2;
+const pages: number[] = [];
+for (let n = Math.max(1, page - windowSize); n <= Math.min(pageCount, page + windowSize); n++) {
+  pages.push(n);
+}
+---
+
+<div id="results" class="results">
+  <p class="result-count mono" role="status" aria-live="polite">
+    {total === 0 ? 'No cars match' : `${formatInt(total)} car${total === 1 ? '' : 's'}`}
+    {total > 0 && pageCount > 1 ? ` · page ${page} of ${pageCount}` : ''}
+  </p>
+
+  {
+    total === 0 ? (
+      <div class="empty">
+        <p>
+          Nothing here yet. Either the filters are too narrow, or this car has not
+          been logged — <a href="/submit">add it to the registry</a>.
+        </p>
+      </div>
+    ) : (
+      <>
+        <div class="table-scroll">
+          <table class="cars">
+            <caption class="visually-hidden">Registered Spitfires matching the current filters</caption>
+            <thead>
+              <tr>
+                <th scope="col">Chassis no.</th>
+                <th scope="col">Model</th>
+                <th scope="col">Year</th>
+                <th scope="col">Colour</th>
+                <th scope="col">Location</th>
+                <th scope="col"><span class="visually-hidden">Details</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {cars.map((car) => (
+                <tr class={car.status === 'archived' ? 'is-archived' : ''}>
+                  <th scope="row">
+                    <a href={`/registry/${car.publicRef}`}>{car.chassisNumber}</a>
+                    {car.status === 'archived' && <span class="tag tag-archived">Archived</span>}
+                    {car.isModified && <span class="tag tag-modified">Modified</span>}
+                  </th>
+                  <td>{car.eraLabel}</td>
+                  <td>{car.modelYear ?? '—'}</td>
+                  <td>{car.colour ?? '—'}</td>
+                  <td>{car.location ?? <span class="private">Private</span>}</td>
+                  <td class="go-cell">
+                    <a href={`/registry/${car.publicRef}`} aria-label={`Details for ${car.chassisNumber}`}>
+                      →
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {pageCount > 1 && (
+          <nav class="pager" aria-label="Registry pages">
+            <a
+              class:list={['pager-step', { disabled: page <= 1 }]}
+              href={pageHref(Math.max(1, page - 1))}
+              aria-disabled={page <= 1 ? 'true' : undefined}
+            >
+              ← Prev
+            </a>
+
+            {pages[0] > 1 && <span class="pager-gap">…</span>}
+
+            {pages.map((n) => (
+              <a
+                class:list={['pager-num', { current: n === page }]}
+                href={pageHref(n)}
+                aria-current={n === page ? 'page' : undefined}
+              >
+                {n}
+              </a>
+            ))}
+
+            {pages.at(-1)! < pageCount && <span class="pager-gap">…</span>}
+
+            <a
+              class:list={['pager-step', { disabled: page >= pageCount }]}
+              href={pageHref(Math.min(pageCount, page + 1))}
+              aria-disabled={page >= pageCount ? 'true' : undefined}
+            >
+              Next →
+            </a>
+          </nav>
+        )}
+      </>
+    )
+  }
+</div>
+
+<style>
+  .result-count {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 0 0 14px;
+  }
+
+  .empty {
+    border: 1px dashed var(--line);
+    border-radius: 3px;
+    padding: 40px 24px;
+    text-align: center;
+    background: var(--card);
+  }
+
+  .empty p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 16px;
+  }
+
+  .table-scroll {
+    overflow-x: auto;
+    /* Positioned so the visually-hidden <caption> resolves its containing block
+       here and gets clipped with the table. Without this it escapes to the
+       initial containing block and drags document scrollWidth out to the
+       table's full width on narrow screens. */
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    background: var(--card);
+  }
+
+  table.cars {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  table.cars th,
+  table.cars td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  table.cars thead th {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--brass);
+    background: rgba(20, 20, 15, 0.03);
+  }
+
+  table.cars tbody tr:last-child th,
+  table.cars tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  table.cars tbody tr:hover {
+    background: rgba(180, 135, 74, 0.07);
+  }
+
+  table.cars tbody th {
+    font-weight: 600;
+  }
+
+  table.cars tbody th a {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--brass);
+  }
+
+  table.cars tbody th a:hover {
+    color: var(--signal-red);
+    border-color: var(--signal-red);
+  }
+
+  .is-archived th a,
+  .is-archived td {
+    opacity: 0.6;
+  }
+
+  .tag {
+    display: inline-block;
+    margin-left: 8px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  .tag-archived {
+    background: rgba(20, 20, 15, 0.1);
+    color: var(--ink-mute);
+  }
+
+  .tag-modified {
+    background: rgba(165, 56, 42, 0.12);
+    color: var(--signal-red);
+  }
+
+  .private {
+    color: var(--ink-mute);
+    font-style: italic;
+  }
+
+  .go-cell a {
+    color: var(--signal-red);
+    text-decoration: none;
+    font-size: 15px;
+  }
+
+  .pager {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .pager a {
+    text-decoration: none;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 7px 11px;
+  }
+
+  .pager a:hover {
+    border-color: var(--brass);
+  }
+
+  .pager .current {
+    background: var(--racing-green);
+    color: var(--parchment);
+    border-color: var(--racing-green);
+  }
+
+  .pager .disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .pager-gap {
+    color: var(--ink-mute);
+  }
+</style>

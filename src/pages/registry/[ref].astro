@@ -1,0 +1,314 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCarByRef } from '../../lib/registry';
+import { formatInt, formatDate } from '../../lib/site';
+
+const { ref } = Astro.params;
+const car = ref ? await getCarByRef(ref) : null;
+
+if (!car) {
+  return new Response(null, { status: 404, statusText: 'Car not found' });
+}
+
+const yearNote =
+  car.buildYear && car.modelYear && car.buildYear !== car.modelYear
+    ? `Built ${car.buildYear}, registered as ${car.modelYear}.`
+    : null;
+
+// Only rows with something in them are rendered — an entry full of dashes
+// reads as missing data rather than an incomplete record.
+const spec: { label: string; value: string | number }[] = [
+  ['Model era', car.eraLabel],
+  ['Series', car.seriesLabel],
+  ['Model year', car.modelYear],
+  ['Build year', car.buildYear],
+  ['First registered', car.firstRegisteredOn ? formatDate(car.firstRegisteredOn) : null],
+  ['Engine', car.engineCc ? `${formatInt(car.engineCc)}cc` : null],
+  ['Engine number', car.engineNumber],
+  ['Colour', car.colour],
+  ['Paint code', car.colourCode],
+  ['Location', car.location],
+  ['Owner', car.ownerName],
+]
+  .filter(([, value]) => value !== null && value !== undefined && value !== '')
+  .map(([label, value]) => ({ label: label as string, value: value as string | number }));
+---
+
+<Base
+  title={`${car.chassisNumber} — Spitplate registry`}
+  description={`Registry entry for Triumph Spitfire ${car.chassisNumber}, ${car.eraLabel}${car.modelYear ? `, ${car.modelYear}` : ''}.`}
+>
+  <article class="car">
+    <header class="car-head">
+      <div class="wrap">
+        <a class="back mono" href="/registry">← Back to registry</a>
+
+        <div class="plate-line">
+          <span class="ref mono">{car.publicRef}</span>
+          {car.status === 'archived' && <span class="badge badge-archived">Archived</span>}
+          {car.isModified && <span class="badge badge-modified">Modified</span>}
+          {!car.commissionPlatePresent && <span class="badge badge-warn">Plate missing</span>}
+        </div>
+
+        <h1>{car.chassisNumber}</h1>
+        <p class="sub">
+          {car.eraLabel}
+          {car.modelYear ? ` · ${car.modelYear}` : ''}
+          {car.colour ? ` · ${car.colour}` : ''}
+        </p>
+        {yearNote && <p class="year-note mono">{yearNote}</p>}
+      </div>
+    </header>
+
+    <section class="section car-body">
+      <div class="wrap car-grid">
+        <div>
+          <h2 class="block-title">Specification</h2>
+          <dl class="spec">
+            {
+              spec.map((row) => (
+                <div class="spec-row">
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              ))
+            }
+          </dl>
+
+          {
+            car.chassisPrefix && (
+              <p class="parse mono">
+                Parsed as prefix <b>{car.chassisPrefix}</b>
+                {car.chassisSerial !== null && <> · serial <b>{formatInt(car.chassisSerial)}</b></>}
+                {car.chassisSuffix && <> · suffix <b>{car.chassisSuffix}</b></>}
+              </p>
+            )
+          }
+        </div>
+
+        <div>
+          {
+            car.isModified && car.modificationNotes && (
+              <div class="note-block">
+                <h2 class="block-title">Modifications</h2>
+                <p>{car.modificationNotes}</p>
+              </div>
+            )
+          }
+
+          {
+            car.notes && (
+              <div class="note-block">
+                <h2 class="block-title">History</h2>
+                <p>{car.notes}</p>
+              </div>
+            )
+          }
+
+          {
+            !car.location && !car.ownerName && (
+              <div class="note-block privacy">
+                <h2 class="block-title">Owner</h2>
+                <p>
+                  This owner has kept their name and location private. That is the
+                  default — the registry tracks the car, not the person.
+                </p>
+              </div>
+            )
+          }
+
+          <div class="note-block correct">
+            <h2 class="block-title">Something wrong?</h2>
+            <p>
+              Corrections go through the same review as new entries. Nothing is
+              overwritten until a moderator has looked at it.
+            </p>
+            <a class="btn" href={`/submit?chassis=${encodeURIComponent(car.chassisNumber)}`}>
+              File a correction
+            </a>
+          </div>
+
+          <p class="stamp mono">
+            Listed {formatDate(car.firstListedAt)} · updated {formatDate(car.updatedAt)}
+          </p>
+        </div>
+      </div>
+    </section>
+  </article>
+</Base>
+
+<style>
+  .car-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 40px 0 52px;
+  }
+
+  .back {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    text-decoration: none;
+    margin-bottom: 28px;
+  }
+
+  .back:hover {
+    color: var(--brass-bright);
+  }
+
+  .plate-line {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .ref {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--brass-bright);
+  }
+
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    background: rgba(241, 231, 210, 0.12);
+    color: var(--parchment);
+  }
+
+  .badge-modified {
+    background: rgba(214, 168, 98, 0.2);
+    color: var(--brass-bright);
+  }
+
+  .badge-warn {
+    background: rgba(165, 56, 42, 0.3);
+    color: #f0b9b1;
+  }
+
+  .car-head h1 {
+    font-size: clamp(34px, 6vw, 68px);
+    line-height: 0.98;
+    color: var(--parchment);
+  }
+
+  .sub {
+    font-size: 18px;
+    color: var(--chrome);
+    margin-top: 12px;
+  }
+
+  .year-note {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--brass-bright);
+    margin-top: 10px;
+  }
+
+  .car-body {
+    padding: 56px 0 88px;
+  }
+
+  .car-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 56px;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .car-grid {
+      grid-template-columns: 1fr;
+      gap: 36px;
+    }
+  }
+
+  .block-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--signal-red);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+
+  .spec {
+    margin: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .spec-row {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  @media (max-width: 520px) {
+    .spec-row {
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+  }
+
+  .spec dt {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  .spec dd {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .parse {
+    font-size: 11px;
+    color: var(--ink-mute);
+    margin-top: 18px;
+    letter-spacing: 0.04em;
+  }
+
+  .note-block {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+
+  .note-block p {
+    margin: 0;
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+
+  .note-block.privacy {
+    background: transparent;
+    border-style: dashed;
+  }
+
+  .note-block.correct .btn {
+    margin-top: 16px;
+  }
+
+  .stamp {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+</style>

@@ -26,12 +26,8 @@ const { monthlyIntake } = Astro.props;
       </div>
 
       <div class="actions">
-        <!-- Routes to the submission form once the flow lands; email is the
-             interim path so the CTA is never a dead end. -->
-        <a class="btn" href="mailto:registry@spitplate.com?subject=Registry%20submission">
-          Add or update an entry
-        </a>
-        <a class="btn ghost" href="#resources">Decode a number first</a>
+        <a class="btn" href="/submit">Add or update an entry</a>
+        <a class="btn ghost" href="/registry">Search the registry first</a>
       </div>
     </div>
   </div>

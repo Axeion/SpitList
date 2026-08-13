@@ -1,0 +1,99 @@
+---
+import Base from '../../layouts/Base.astro';
+
+const kind = Astro.url.searchParams.get('kind');
+const ref = Astro.url.searchParams.get('ref');
+const isCorrection = kind === 'update';
+---
+
+<Base title="Submission received — Spitplate" description="Your submission is in the review queue.">
+  <section class="thanks">
+    <div class="wrap">
+      <span class="section-tag">In the queue</span>
+      <h1>{isCorrection ? 'Correction filed.' : 'Car received.'}</h1>
+
+      <p class="lede">
+        {
+          isCorrection
+            ? 'That chassis number is already in the registry, so your entry was filed as a correction to the existing one rather than a second listing.'
+            : 'It is waiting for review. Nothing appears in the registry until a moderator has looked at it — usually a day or two.'
+        }
+      </p>
+
+      {
+        isCorrection && ref && (
+          <p class="lede">
+            The existing entry is <a href={`/registry/${ref}`}>{ref}</a>. It stays
+            exactly as it is until your correction is approved.
+          </p>
+        )
+      }
+
+      <div class="actions">
+        <a class="btn" href="/registry">Browse the registry</a>
+        <a class="btn ghost" href="/submit">Add another car</a>
+      </div>
+
+      <p class="foot mono">
+        Left an email? We'll only use it if something needs clarifying.
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .thanks {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 96px 0 110px;
+    min-height: 60vh;
+  }
+
+  .thanks .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .thanks h1 {
+    font-size: clamp(36px, 6vw, 68px);
+    line-height: 1;
+    color: var(--parchment);
+  }
+
+  .lede {
+    font-size: 18px;
+    line-height: 1.65;
+    color: var(--chrome);
+    max-width: 620px;
+    margin-top: 20px;
+  }
+
+  .lede a {
+    color: var(--brass-bright);
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 34px;
+  }
+
+  .thanks .btn.ghost {
+    color: var(--parchment);
+    border-color: rgba(241, 231, 210, 0.4);
+  }
+
+  .thanks .btn.ghost:hover {
+    background: var(--parchment);
+    color: var(--racing-green);
+  }
+
+  .foot {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    opacity: 0.7;
+    margin-top: 40px;
+  }
+</style>

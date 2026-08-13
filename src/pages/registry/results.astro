@@ -1,0 +1,24 @@
+---
+import ResultsTable from '../../components/registry/ResultsTable.astro';
+import { searchCars } from '../../lib/registry';
+import { filtersFromParams, buildQuery } from '../../lib/filters';
+
+/**
+ * htmx target. Renders the results fragment alone — no layout, no doctype —
+ * so it can be swapped straight into the page.
+ *
+ * Same query parameters and same component as /registry, so the two can never
+ * disagree about what a filter means.
+ */
+export const partial = true;
+
+const filters = filtersFromParams(Astro.url.searchParams);
+const result = await searchCars(filters);
+
+// Tell htmx to show the canonical /registry URL rather than this endpoint's.
+// Without it the address bar ends up on /registry/results, and reloading or
+// sharing that gives a bare fragment with no page around it.
+Astro.response.headers.set('HX-Push-Url', `/registry${buildQuery(filters)}`);
+---
+
+<ResultsTable result={result} filters={filters} />

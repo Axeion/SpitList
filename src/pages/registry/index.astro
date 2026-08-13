@@ -1,0 +1,70 @@
+---
+import Base from '../../layouts/Base.astro';
+import FilterForm from '../../components/registry/FilterForm.astro';
+import ResultsTable from '../../components/registry/ResultsTable.astro';
+import { searchCars, getFilterOptions } from '../../lib/registry';
+import { filtersFromParams } from '../../lib/filters';
+import { formatInt } from '../../lib/site';
+
+const filters = filtersFromParams(Astro.url.searchParams);
+const [result, options] = await Promise.all([searchCars(filters), getFilterOptions()]);
+---
+
+<Base
+  title="Registry — Spitplate"
+  description="Search the Spitplate registry of surviving Triumph Spitfires by chassis or commission number, model era, year, and location."
+>
+  <section class="registry-head">
+    <div class="wrap">
+      <span class="section-tag">The Registry</span>
+      <h1>Search {formatInt(result.total)} logged chassis numbers.</h1>
+      <p>
+        Every car here was submitted by an owner or a club and reviewed before it
+        went live. Owner names and locations appear only where the owner chose to
+        publish them.
+      </p>
+    </div>
+  </section>
+
+  <section class="section registry-body">
+    <div class="wrap">
+      <FilterForm filters={filters} options={options} />
+      <ResultsTable result={result} filters={filters} />
+    </div>
+  </section>
+</Base>
+
+<script>
+  import 'htmx.org';
+</script>
+
+<style>
+  .registry-head {
+    background: var(--racing-green);
+    color: var(--parchment);
+    padding: 64px 0 56px;
+  }
+
+  .registry-head .section-tag {
+    color: var(--brass-bright);
+  }
+
+  .registry-head h1 {
+    font-size: clamp(30px, 4.6vw, 52px);
+    line-height: 1;
+    color: var(--parchment);
+    max-width: 760px;
+  }
+
+  .registry-head p {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--chrome);
+    max-width: 620px;
+    margin-top: 18px;
+  }
+
+  .registry-body {
+    padding: 44px 0 88px;
+  }
+</style>
