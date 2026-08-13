@@ -1,0 +1,119 @@
+---
+import { SITE } from '../lib/site';
+
+const year = new Date().getFullYear();
+---
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <h3>{SITE.name}</h3>
+        <p>
+          An independent, volunteer-run registry of surviving Triumph Spitfires, logged
+          by commission and VIN number. Entries are contributed by owners and clubs, and
+          reviewed before they go live.
+        </p>
+      </div>
+
+      <div>
+        <h3>Registry</h3>
+        <ul>
+          <li><a href="#registry">Model eras</a></li>
+          <li><a href="#stats">Statistics</a></li>
+          <li><a href="#submit">Add your car</a></li>
+          <li><a href="#method">How entries are reviewed</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Contact</h3>
+        <ul>
+          <li><a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a></li>
+          <li><a href="#clubs">Club directory</a></li>
+          <li><a href="#resources">Reference material</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="foot-bottom">
+      <span>© {year} {SITE.name} · {SITE.domain}</span>
+      <span class="disclaimer">
+        Not affiliated with, endorsed by, or connected to any Triumph marque owner or
+        any other Spitfire registry. "Triumph" and "Spitfire" are used descriptively and
+        remain the marks of their respective owners.
+      </span>
+    </div>
+  </div>
+</footer>
+
+<style>
+  footer {
+    background: var(--ink);
+    color: var(--chrome);
+    padding: 56px 0 30px;
+  }
+
+  .foot-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr;
+    gap: 40px;
+  }
+
+  @media (max-width: 760px) {
+    .foot-grid {
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+  }
+
+  footer h3 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brass-bright);
+    margin-bottom: 16px;
+  }
+
+  footer p,
+  footer li {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #a29c8e;
+  }
+
+  footer ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  footer a {
+    color: #c9c2b2;
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    color: var(--parchment);
+  }
+
+  .foot-bottom {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 44px;
+    padding-top: 22px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: #6b6558;
+    letter-spacing: 0.04em;
+  }
+
+  .disclaimer {
+    max-width: 620px;
+  }
+</style>

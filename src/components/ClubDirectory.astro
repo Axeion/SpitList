@@ -1,0 +1,98 @@
+---
+import { CLUBS } from '../data/clubs';
+
+const countries = new Set(CLUBS.map((c) => c.country)).size;
+---
+
+<section class="section" id="clubs">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">International Clubs</span>
+      <h2>{countries} countries, one shared obsession.</h2>
+      <p>The clubs that keep these cars on the road — and the ones worth joining regardless.</p>
+    </div>
+
+    <div class="club-grid reveal">
+      {
+        CLUBS.map((club) =>
+          club.url ? (
+            <a class="club-cell" href={club.url} rel="noopener external">
+              <span>{club.name}</span>
+              <span class="flag">{club.country}</span>
+            </a>
+          ) : (
+            <div class="club-cell is-static">
+              <span>{club.name}</span>
+              <span class="flag">{club.country}</span>
+            </div>
+          )
+        )
+      }
+    </div>
+
+    <p class="grid-note mono reveal">
+      Running a club that belongs here? Send us the link.
+    </p>
+  </div>
+</section>
+
+<style>
+  .club-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+  }
+
+  @media (max-width: 820px) {
+    .club-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 520px) {
+    .club-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .club-cell {
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 20px;
+    text-decoration: none;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.15s ease;
+  }
+
+  a.club-cell:hover {
+    background: var(--card);
+  }
+
+  /* Clubs whose current link we haven't confirmed render as plain cells rather
+     than links into nowhere. */
+  .club-cell.is-static {
+    color: var(--ink-soft);
+  }
+
+  .club-cell .flag {
+    color: var(--brass);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .grid-note {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 18px 0 0;
+  }
+</style>

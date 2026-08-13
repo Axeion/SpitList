@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+import Hero from '../components/Hero.astro';
+import EraStrip from '../components/EraStrip.astro';
+import HistoryEssay from '../components/HistoryEssay.astro';
+import StatsSection from '../components/StatsSection.astro';
+import MethodNotes from '../components/MethodNotes.astro';
+import SubmitPanel from '../components/SubmitPanel.astro';
+import ClubDirectory from '../components/ClubDirectory.astro';
+import ResourceList from '../components/ResourceList.astro';
+import { getEraStats, getTotals, getMonthlyIntake, getSeriesNotes } from '../lib/registry';
+
+// Every number on this page is read here. Nothing downstream hardcodes a count.
+const [eras, totals, monthlyIntake, seriesNotes] = await Promise.all([
+  getEraStats(),
+  getTotals(),
+  getMonthlyIntake(),
+  getSeriesNotes('1500'),
+]);
+---
+
+<Base>
+  <Hero totals={totals} />
+  <EraStrip eras={eras} seriesNotes={seriesNotes} />
+  <HistoryEssay />
+  <StatsSection eras={eras} totals={totals} />
+  <MethodNotes />
+  <SubmitPanel monthlyIntake={monthlyIntake} />
+  <ClubDirectory />
+  <ResourceList />
+</Base>

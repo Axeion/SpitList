@@ -1,0 +1,142 @@
+---
+import { NAV_LINKS, SITE } from '../lib/site';
+---
+
+<header class="nav">
+  <div class="navbar">
+    <a class="brand" href="/">
+      <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <circle cx="20" cy="20" r="19" stroke="#d6a862" stroke-width="1.2"></circle>
+        <path d="M8 24 L18 14 L24 14 L14 24 Z" fill="#d6a862"></path>
+        <path d="M22 24 L30 16 L34 16 L26 24 Z" fill="#f1e7d2"></path>
+      </svg>
+      <span class="brand-text">
+        <span class="k1">{SITE.name}</span><br />
+        <span class="k2">{SITE.tagline}</span>
+      </span>
+    </a>
+
+    <nav class="links" aria-label="Primary">
+      {NAV_LINKS.map((link) => <a href={link.href}>{link.label}</a>)}
+      <a href="#submit" class="nav-cta">Add Your Car</a>
+    </nav>
+
+    <a class="menu-link" href="#submit">Add Your Car</a>
+  </div>
+</header>
+
+<style>
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--racing-green);
+    border-bottom: 1px solid var(--line-on-dark);
+  }
+
+  .navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 28px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--parchment);
+    text-decoration: none;
+  }
+
+  .brand svg {
+    width: 34px;
+    height: 34px;
+    flex: none;
+  }
+
+  .brand-text {
+    line-height: 1.05;
+  }
+
+  .brand-text .k1 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 17px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--parchment);
+  }
+
+  .brand-text .k2 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--brass-bright);
+    text-transform: uppercase;
+  }
+
+  .links {
+    display: flex;
+    gap: 28px;
+    align-items: center;
+  }
+
+  .links a {
+    color: var(--parchment);
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.82;
+    padding: 6px 2px;
+    border-bottom: 1px solid transparent;
+  }
+
+  .links a:hover {
+    opacity: 1;
+    border-color: var(--brass-bright);
+  }
+
+  .nav-cta,
+  .menu-link {
+    background: var(--brass);
+    color: var(--racing-green) !important;
+    padding: 9px 16px !important;
+    border-radius: 2px;
+    font-weight: 600;
+    opacity: 1 !important;
+    border: none !important;
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .nav-cta:hover,
+  .menu-link:hover {
+    background: var(--brass-bright);
+  }
+
+  /* The concept had a hamburger that opened nothing. Below the breakpoint the
+     nav collapses to the one action that matters; the rest of the page is a
+     single scroll anyway. */
+  .menu-link {
+    display: none;
+  }
+
+  @media (max-width: 860px) {
+    .links {
+      display: none;
+    }
+
+    .menu-link {
+      display: inline-block;
+    }
+  }
+</style>

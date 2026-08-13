@@ -1,0 +1,76 @@
+---
+import { formatInt } from '../lib/site';
+
+interface Props {
+  /** Mean cars added per month over the last year, or null if we lack a year of history. */
+  monthlyIntake: number | null;
+}
+
+const { monthlyIntake } = Astro.props;
+---
+
+<section class="section section-alt" id="submit">
+  <div class="wrap">
+    <div class="submit-panel reveal">
+      <div>
+        <h2>Own one? Get it on the books.</h2>
+        <p>
+          {
+            monthlyIntake && monthlyIntake > 0
+              ? `About ${formatInt(monthlyIntake)} new cars join the registry every month. `
+              : ''
+          }Submit a chassis or commission number, model, and whatever history you know.
+          Your name and location stay private unless you choose to publish them, and
+          your email is never shown.
+        </p>
+      </div>
+
+      <div class="actions">
+        <!-- Routes to the submission form once the flow lands; email is the
+             interim path so the CTA is never a dead end. -->
+        <a class="btn" href="mailto:registry@spitplate.com?subject=Registry%20submission">
+          Add or update an entry
+        </a>
+        <a class="btn ghost" href="#resources">Decode a number first</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .submit-panel {
+    background: var(--parchment-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 48px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 30px;
+    align-items: center;
+  }
+
+  @media (max-width: 760px) {
+    .submit-panel {
+      grid-template-columns: 1fr;
+      padding: 32px 24px;
+    }
+  }
+
+  .submit-panel h2 {
+    font-size: clamp(26px, 3.6vw, 38px);
+  }
+
+  .submit-panel p {
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    margin-top: 12px;
+    max-width: 480px;
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+</style>

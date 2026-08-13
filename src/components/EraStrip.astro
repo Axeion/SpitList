@@ -1,0 +1,185 @@
+---
+import { formatInt } from '../lib/site';
+import type { EraStat, SeriesNote } from '../lib/registry';
+
+interface Props {
+  eras: EraStat[];
+  seriesNotes: SeriesNote[];
+}
+
+const { eras, seriesNotes } = Astro.props;
+
+const MARKET_LABELS: Record<string, string> = {
+  worldwide: 'Worldwide',
+  'north-america': 'North America',
+  'rest-of-world': 'Rest of world',
+};
+---
+
+<section class="section" id="registry">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">The Registry</span>
+      <h2>Five model eras, one running tally.</h2>
+      <p>
+        The database is organized the way Triumph built the car — by production series.
+        Each era has its own commission number range, its own quirks, and its own count
+        of survivors.
+      </p>
+    </div>
+
+    <div class="era-strip reveal">
+      {
+        eras.map((era) => (
+          <article class="era-card">
+            <div class="era-num mono">
+              {String(era.ordinal).padStart(2, '0')} · {era.shortLabel.toUpperCase()}
+            </div>
+            <h3>{era.name}</h3>
+            <div class="era-years">
+              {era.yearFrom} – {era.yearTo}
+              {era.engineCc ? ` · ${formatInt(era.engineCc)}cc` : ''}
+            </div>
+            <div class="era-metric">
+              <span>Built</span>
+              <b>{formatInt(era.unitsBuilt)}</b>
+            </div>
+            <div class="era-metric">
+              <span>Registered</span>
+              <b>{formatInt(era.registered)}</b>
+            </div>
+            <a class="era-link" href="#stats">
+              See the numbers <span aria-hidden="true">→</span>
+            </a>
+          </article>
+        ))
+      }
+    </div>
+
+    <p class="strip-note mono reveal">
+      Per-car browse and search arrive with the registry release.
+    </p>
+
+    <div class="cards3" style="margin-top:26px;">
+      {
+        seriesNotes.map((series) => (
+          <div class="note-card reveal">
+            <div class="n mono">{series.prefix} SERIES</div>
+            <h3>
+              1500, {MARKET_LABELS[series.market] ?? series.market}
+              {series.yearFrom ? ` · ${series.yearFrom}–${series.yearTo ?? ''}` : ''}
+            </h3>
+            <p>{series.notes}</p>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .era-strip {
+    display: flex;
+    overflow-x: auto;
+    gap: 18px;
+    padding-bottom: 10px;
+    scroll-snap-type: x proximity;
+  }
+
+  .era-strip::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  .era-strip::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 3px;
+  }
+
+  .era-card {
+    flex: 0 0 250px;
+    scroll-snap-align: start;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 26px 22px;
+    position: relative;
+    transition:
+      transform 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .era-card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 20px 34px -22px rgba(20, 20, 15, 0.4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .era-card,
+    .era-card:hover {
+      transform: none;
+      transition: none;
+    }
+  }
+
+  .era-num {
+    font-size: 11px;
+    color: var(--brass);
+    letter-spacing: 0.1em;
+  }
+
+  .era-card h3 {
+    font-size: 30px;
+    margin: 10px 0 4px;
+  }
+
+  .era-years {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #6b6455;
+    margin-bottom: 18px;
+  }
+
+  .era-metric {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .era-metric b {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .era-metric span {
+    color: var(--ink-mute);
+  }
+
+  .era-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    text-decoration: none;
+    color: var(--signal-red);
+    border-bottom: 1px solid transparent;
+  }
+
+  .era-link:hover {
+    border-color: var(--signal-red);
+  }
+
+  .strip-note {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    margin: 14px 0 0;
+  }
+</style>

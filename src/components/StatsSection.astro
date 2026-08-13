@@ -1,0 +1,278 @@
+---
+import { formatInt, formatShare, formatDate, SURVIVAL_ESTIMATE_PCT } from '../lib/site';
+import type { EraStat, RegistryTotals } from '../lib/registry';
+
+interface Props {
+  eras: EraStat[];
+  totals: RegistryTotals;
+}
+
+const { eras, totals } = Astro.props;
+
+// Bars are scaled against the strongest era rather than against 100%, so the
+// comparison between eras stays readable while the registry is young. The
+// literal percentage is printed next to each bar so the scaling can't mislead.
+const maxShare = Math.max(...eras.map((e) => e.sharePct), 0.0001);
+const barWidth = (share: number) => `${Math.max(share / maxShare, 0) * 100}%`;
+
+// Semicircle of r=50 is π·50 ≈ 157 units long.
+const ARC_LENGTH = 157;
+const gaugeOffset = ARC_LENGTH * (1 - SURVIVAL_ESTIMATE_PCT / 100);
+---
+
+<section class="section section-dark texture" id="stats">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">Database Statistics</span>
+      <h2>Documented against what left the factory.</h2>
+      <p>
+        Registered totals are a fraction of production — by design, this project only
+        counts cars someone has actually stepped forward to log.
+      </p>
+    </div>
+
+    <div class="dash reveal">
+      <div class="table-wrap">
+        <table class="reg">
+          <caption class="visually-hidden">
+            Spitfires registered against factory production, by model era
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Model</th>
+              <th scope="col">Built</th>
+              <th scope="col">Registered</th>
+              <th scope="col">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              eras.map((era, i) => (
+                <tr>
+                  <th scope="row">{era.shortLabel}</th>
+                  <td>{formatInt(era.unitsBuilt)}</td>
+                  <td>{formatInt(era.registered)}</td>
+                  <td>
+                    <div class="share-cell">
+                      <div class="bar-wrap">
+                        <div
+                          class="bar"
+                          style={`--w:${barWidth(era.sharePct)};--i:${i}`}
+                        />
+                      </div>
+                      <span class="share-num">{formatShare(era.sharePct)}</span>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            }
+            <tr class="total-row">
+              <th scope="row">Total</th>
+              <td>{formatInt(totals.unitsBuilt)}</td>
+              <td>{formatInt(totals.registered)}</td>
+              <td>
+                <div class="share-cell">
+                  <div class="bar-wrap">
+                    <div
+                      class="bar"
+                      style={`--w:${barWidth(totals.sharePct)};--i:${eras.length}`}
+                    />
+                  </div>
+                  <span class="share-num">{formatShare(totals.sharePct)}</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p class="table-note mono">
+          Live from the registry · last entry added {formatDate(totals.lastListedAt)}
+          {totals.archived > 0 ? ` · ${formatInt(totals.archived)} archived` : ''}
+        </p>
+      </div>
+
+      <div class="gauge-box">
+        <svg viewBox="0 0 120 70" role="img" aria-label={`Estimated ${SURVIVAL_ESTIMATE_PCT} percent of production still on the road`}>
+          <path
+            d="M10 65 A50 50 0 0 1 110 65"
+            fill="none"
+            stroke="rgba(255,255,255,0.12)"
+            stroke-width="10"
+            stroke-linecap="round"></path>
+          <path
+            class="gauge-arc"
+            d="M10 65 A50 50 0 0 1 110 65"
+            fill="none"
+            stroke="var(--brass-bright)"
+            stroke-width="10"
+            stroke-linecap="round"
+            stroke-dasharray={ARC_LENGTH}
+            style={`--arc-length:${ARC_LENGTH};--arc-offset:${gaugeOffset.toFixed(1)}`}></path>
+        </svg>
+        <div class="gauge-num">~{SURVIVAL_ESTIMATE_PCT}%</div>
+        <div class="gauge-cap">
+          Estimated share of production<br />still on the road today
+        </div>
+        <p class="gauge-foot">
+          A marque-community estimate, not a figure this registry can measure.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .dash {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 50px;
+    align-items: center;
+  }
+
+  @media (max-width: 900px) {
+    .dash {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table.reg {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  table.reg th {
+    text-align: left;
+    font-weight: 400;
+  }
+
+  table.reg thead th {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    color: var(--brass-bright);
+    border-bottom: 1px solid var(--line-on-dark);
+    padding: 10px 8px;
+  }
+
+  table.reg td,
+  table.reg tbody th {
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--line-on-dark);
+    color: var(--chrome);
+  }
+
+  table.reg .total-row td,
+  table.reg .total-row th {
+    color: var(--parchment);
+    font-weight: 600;
+    border-bottom: none;
+    padding-top: 16px;
+  }
+
+  .share-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .bar-wrap {
+    width: 110px;
+    flex: none;
+    background: rgba(255, 255, 255, 0.08);
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar {
+    height: 100%;
+    background: var(--brass-bright);
+    width: var(--w);
+  }
+
+  .share-num {
+    font-size: 11px;
+    color: var(--chrome);
+    min-width: 44px;
+  }
+
+  .table-note {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    opacity: 0.7;
+    margin: 16px 0 0;
+  }
+
+  .gauge-box {
+    background: var(--racing-green-2);
+    border: 1px solid var(--line-on-dark);
+    border-radius: 6px;
+    padding: 34px;
+    text-align: center;
+  }
+
+  .gauge-box svg {
+    width: 220px;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+  }
+
+  .gauge-arc {
+    stroke-dashoffset: var(--arc-offset);
+  }
+
+  .gauge-num {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-size: 56px;
+    color: var(--brass-bright);
+    margin-top: -10px;
+  }
+
+  .gauge-cap {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--chrome);
+    margin-top: 6px;
+  }
+
+  .gauge-foot {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--chrome);
+    opacity: 0.65;
+    margin: 14px 0 0;
+  }
+
+  /* Animation is gated on `.js-reveal`, which only exists when scripting is on.
+     Without JS the bars and arc render at their true values immediately. */
+  :global(.js-reveal) .bar {
+    width: 0;
+    transition: width 1.1s ease;
+    transition-delay: calc(var(--i, 0) * 90ms);
+  }
+
+  :global(.js-reveal) .dash.in .bar {
+    width: var(--w);
+  }
+
+  :global(.js-reveal) .gauge-arc {
+    stroke-dashoffset: var(--arc-length);
+    transition: stroke-dashoffset 1.4s ease 0.2s;
+  }
+
+  :global(.js-reveal) .dash.in .gauge-arc {
+    stroke-dashoffset: var(--arc-offset);
+  }
+</style>

@@ -1,0 +1,132 @@
+---
+/**
+ * Mechanical digit-roller for the live registered-car count.
+ *
+ * The digits are server-rendered at their final positions, so the real number
+ * is readable with JavaScript disabled. The script only plays the roll: it
+ * parks the strips at zero, then releases them column by column.
+ */
+interface Props {
+  value: number;
+  minDigits?: number;
+  label: string;
+}
+
+const { value, minDigits = 6, label } = Astro.props;
+
+const digits = String(Math.max(0, Math.round(value))).padStart(minDigits, '0').split('');
+---
+
+<div class="odometer-block">
+  <div
+    class="odometer"
+    role="img"
+    aria-label={`${value.toLocaleString('en-US')} ${label}`}
+  >
+    {
+      digits.map((digit) => (
+        <div class="digit-col">
+          <div class="digit-strip" style={`--offset:-${Number(digit) * 38}px`}>
+            {Array.from({ length: 10 }, (_, n) => (
+              <div aria-hidden="true">{n}</div>
+            ))}
+          </div>
+        </div>
+      ))
+    }
+  </div>
+  <div class="odo-caption">{label}</div>
+</div>
+
+<style>
+  .odometer {
+    display: flex;
+    background: var(--ink);
+    padding: 8px 10px;
+    border-radius: 3px;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    width: max-content;
+  }
+
+  .digit-col {
+    width: 26px;
+    height: 38px;
+    overflow: hidden;
+    position: relative;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .digit-col:last-child {
+    border-right: none;
+  }
+
+  .digit-strip {
+    display: flex;
+    flex-direction: column;
+    transform: translateY(var(--offset, 0));
+  }
+
+  .digit-strip.rolling {
+    transition: transform 1.4s cubic-bezier(0.2, 0.9, 0.25, 1);
+  }
+
+  .digit-strip > div {
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 24px;
+    color: var(--brass-bright);
+  }
+
+  .odo-caption {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #5b5142;
+    margin-top: 8px;
+  }
+</style>
+
+<script>
+  const odometer = document.querySelector<HTMLElement>('.odometer');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (odometer && !reduced) {
+    const strips = [...odometer.querySelectorAll<HTMLElement>('.digit-strip')];
+
+    // Park at zero before the first paint we can reach.
+    strips.forEach((strip) => {
+      strip.style.transform = 'translateY(0)';
+    });
+
+    const roll = () => {
+      strips.forEach((strip, i) => {
+        window.setTimeout(() => {
+          strip.classList.add('rolling');
+          // Drop the override and fall back to the server-rendered --offset.
+          strip.style.removeProperty('transform');
+        }, i * 120);
+      });
+    };
+
+    if ('IntersectionObserver' in window) {
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            roll();
+            io.disconnect();
+          }
+        },
+        { threshold: 0.3 }
+      );
+      io.observe(odometer);
+    } else {
+      roll();
+    }
+  }
+</script>
