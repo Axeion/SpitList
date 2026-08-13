@@ -13,7 +13,7 @@
  * only, so no invented person ever appears in the registry.
  */
 import { readFile } from 'node:fs/promises';
-import { connect } from './_client.mjs';
+import { connect, explainConnectionError } from './_client.mjs';
 
 const TOTAL_BY_ERA = { mk1: 24, mk2: 21, mk3: 34, mk4: 31, 1500: 76 };
 
@@ -173,6 +173,8 @@ try {
   console.log(`Registry now reads: ${totals.registered} published of ${totals.units_built} built (${totals.share_pct}%).`);
 } catch (err) {
   console.error(`\nSeed failed: ${err.message}`);
+  const hint = explainConnectionError(err);
+  if (hint) console.error(`\n${hint}`);
   process.exitCode = 1;
 } finally {
   await sql.end();

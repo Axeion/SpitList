@@ -156,11 +156,35 @@ railway add --database postgres
 railway up
 ```
 
-Then set `DATABASE_URL` on the app service to the Postgres service's reference
-variable — `${{Postgres.DATABASE_URL}}`, substituting the service's actual name
-if it isn't `Postgres`. Give Spitplate its own Postgres service rather than
-sharing one with another project; the registry owns its schema and its
-migrations run automatically on deploy.
+#### Variables to set on the app service
+
+| Variable | Value | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` | **A reference variable, typed literally** — not a pasted connection string. Substitute the service's real name if it isn't `Postgres`. |
+| `ADMIN_API_TOKEN` | `openssl rand -hex 32` | Guards the n8n moderation callback. Unset means that route refuses everything. |
+| `N8N_SUBMISSION_WEBHOOK_URL` | your n8n webhook, or leave unset | Unset just means no notification; submissions still queue. |
+| `PORT` | **do not set** | Railway injects it. Setting it yourself can break routing. |
+
+> **The one that bites.** Do not copy `DATABASE_URL` out of `.env.example`. It
+> points at `localhost`, which inside a Railway container is the app itself, not
+> your database — the pre-deploy migration fails and takes the whole deploy with
+> it. `${{Postgres.DATABASE_URL}}` resolves to the private-network host
+> (`postgres.railway.internal`), which is faster and free; `DATABASE_PUBLIC_URL`
+> goes out through the TCP proxy and bills egress, so only use it from your
+> laptop.
+
+Give Spitplate its own Postgres service rather than sharing one with another
+project: the registry owns its schema, and its migrations run automatically on
+every deploy.
+
+#### If the deploy fails
+
+- **Pre-deploy / migrate stage** — almost always `DATABASE_URL`. The script
+  prints what's wrong and what to set; check the deploy logs rather than
+  guessing.
+- **Healthcheck stage** — the app booted but `/health` returned 503, which means
+  it reached the container and not the database. Same variable, same fix.
+- **Build stage** — a real build error; the logs will name the file.
 
 `railway.json` handles the rest: Dockerfile builder, healthcheck on `/health`,
 and `npm run db:migrate` as a pre-deploy step so schema changes land before the

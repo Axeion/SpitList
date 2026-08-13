@@ -5,7 +5,7 @@
  */
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { connect } from './_client.mjs';
+import { connect, explainConnectionError } from './_client.mjs';
 
 const DIR = 'db/migrations';
 
@@ -43,6 +43,8 @@ try {
   console.log(ran ? `\n${ran} migration(s) applied.` : 'Already up to date.');
 } catch (err) {
   console.error(`\nMigration failed: ${err.message}`);
+  const hint = explainConnectionError(err);
+  if (hint) console.error(`\n${hint}`);
   process.exitCode = 1;
 } finally {
   await sql.end();
