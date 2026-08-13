@@ -218,6 +218,7 @@ know.
 | `npm run db:migrate` | Apply pending migrations |
 | `npm run db:seed` | Reference data + regenerate placeholder cars |
 | `npm run db:setup` | Both of the above |
+| `npm run import` | Bulk CSV import into the review queue — see [docs/importing.md](docs/importing.md) |
 
 ## Stack
 
@@ -337,6 +338,18 @@ drives both, but nothing routes through Caddy on Railway.
 POSTGRES_PASSWORD=... docker compose up -d --build
 docker compose run --rm app npm run db:migrate
 ```
+
+## Bulk import
+
+`npm run import -- roster.csv --source "TSSC roster 2026"` loads a dataset into
+the review queue. Dry run by default; `--commit` to write; `--rollback <batch>`
+to undo. Rows go through the same validation as the public form, and imported
+owner details are never published — a third party's roster cannot consent on an
+owner's behalf. Full notes, including what rollback deliberately will not undo,
+are in [docs/importing.md](docs/importing.md).
+
+Only import data you have permission to use. A registry's compiled contents are
+someone's work, and the owner details in it were given to them, not to us.
 
 ## Next
 
