@@ -12,8 +12,10 @@
     "start": "node ./dist/server/entry.mjs",
     "check": "astro check",
     "db:migrate": "node scripts/migrate.mjs",
+    "db:reference": "node scripts/reference.mjs",
     "db:seed": "node scripts/seed.mjs",
     "db:setup": "npm run db:migrate && npm run db:seed",
+    "db:deploy": "npm run db:migrate && npm run db:reference",
     "import": "tsx scripts/import.ts"
   },
   "dependencies": {

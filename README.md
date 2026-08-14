@@ -218,8 +218,10 @@ know.
 | `npm start` | Run the built server |
 | `npm run check` | Typecheck `.astro` and `.ts` |
 | `npm run db:migrate` | Apply pending migrations |
-| `npm run db:seed` | Reference data + regenerate placeholder cars |
-| `npm run db:setup` | Both of the above |
+| `npm run db:reference` | Apply `db/seed/*.sql` — real reference data, nothing synthetic. Safe in production |
+| `npm run db:seed` | Reference data **+ regenerate placeholder cars**. Development only |
+| `npm run db:setup` | migrate + seed — the development entry point |
+| `npm run db:deploy` | migrate + reference — what Railway runs before each release |
 | `npm run import` | Bulk CSV import into the review queue — see [docs/importing.md](docs/importing.md) |
 
 ## Stack
@@ -310,16 +312,26 @@ every deploy.
 - **Build stage** — a real build error; the logs will name the file.
 
 `railway.json` handles the rest: Dockerfile builder, healthcheck on `/health`,
-and `npm run db:migrate` as a pre-deploy step so schema changes land before the
-new version takes traffic. Railway injects `PORT` and terminates TLS.
+and `npm run db:deploy` as a pre-deploy step so schema and reference data land
+before the new version takes traffic. Railway injects `PORT` and terminates TLS.
 
 Two things worth knowing before changing them:
 
 - The image is **Debian-slim, not Alpine**, deliberately. Railway's private
   networking is IPv6-only and musl-based images need an extra opt-in flag to
   resolve `*.railway.internal`.
-- **Seeding is not part of the deploy.** `db:seed` generates synthetic cars and
-  must never run against production. Only `db:migrate` is wired in.
+- **`db:seed` must never run against production** — it generates synthetic
+  cars. The deploy runs `db:deploy` (migrate + `db:reference`), which applies
+  `db/seed/*.sql` and stops there.
+
+  These were one command until the sourced serial ranges went in, and the split
+  exists because of what that exposed: migrations created `chassis_ranges` on
+  deploy and nothing ever filled it, because the only command that could would
+  also have injected ~190 fake cars into the live registry. Reference data is
+  real production history and belongs in the deploy; placeholder cars do not.
+
+  So everything in `db/seed/` runs against production on the next release. Keep
+  it idempotent and keep it real.
 
 ### Local Postgres via compose
 

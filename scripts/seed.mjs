@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 /**
+ * DEVELOPMENT ONLY. Never run this against production — use `npm run
+ * db:reference` (scripts/reference.mjs), which applies the same db/seed/*.sql
+ * files and stops there.
+ *
  * Seeds reference data (real production figures) and a set of PLACEHOLDER cars
  * so the stats surfaces have something live to read.
  *
@@ -112,8 +116,9 @@ function pickWeighted(rows) {
 const sql = connect();
 
 try {
-  // Every file in db/seed, in name order. Listing them by hand is how
-  // 0002_chassis_ranges.sql came to exist without ever being applied.
+  // Every file in db/seed, in name order — the same set scripts/reference.mjs
+  // applies on deploy. Listing them by hand is how 0002_chassis_ranges.sql came
+  // to exist without ever being applied.
   const seedFiles = (await readdir('db/seed')).filter((f) => f.endsWith('.sql')).sort();
   for (const file of seedFiles) {
     console.log(`Seeding ${file}...`);

@@ -74,9 +74,9 @@ Railway edge (TLS, routing)  →  spitplate service   (Dockerfile, $PORT injecte
 ```
 
 Railway, configured by `railway.json`: Dockerfile builder, healthcheck on
-`/health`, and `npm run db:migrate` as a pre-deploy step so schema changes land
-before the new version takes traffic. `DATABASE_URL` comes from the Postgres
-service as a reference variable.
+`/health`, and `npm run db:deploy` as a pre-deploy step so schema changes and
+reference data land before the new version takes traffic. `DATABASE_URL` comes
+from the Postgres service as a reference variable.
 
 Two things this pins down:
 
@@ -84,8 +84,14 @@ Two things this pins down:
   IPv6-only and musl-based images need an extra opt-in flag to resolve
   `*.railway.internal`. glibc removes the failure mode instead of documenting a
   workaround for it.
-- **Seeding is not part of the deploy.** `db:seed` generates synthetic cars.
-  Migrations run automatically; seeding never does.
+- **Reference data deploys; placeholder cars never do.** `db/seed/*.sql` is real
+  production history — build totals, commission series, sourced serial ranges —
+  and runs on every release via `db:reference`. `db:seed` layers ~190 synthetic
+  cars on top of that for development and must not touch production.
+
+  Originally one command, which meant a migration could create a table on deploy
+  that nothing was allowed to fill. Splitting them is what lets schema and the
+  data that gives it meaning ship together.
 
 Managed Postgres also settles the Neon question — no reason to add a second
 provider for a database this small.

@@ -159,6 +159,10 @@ the join is a sequential scan over a few thousand rows. Revisit if that changes.
 
 ## Seed data
 
+These are two separate commands for a reason — `npm run db:reference` applies
+only the first of the following, and is what runs on deploy. `npm run db:seed`
+does both and is development-only.
+
 `npm run db:seed` does two separate things:
 
 1. **Reference data** (`db/seed/0001_reference.sql`) — real production figures
