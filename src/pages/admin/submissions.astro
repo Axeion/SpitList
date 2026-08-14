@@ -116,6 +116,33 @@ const [pending, counts, recent] = await Promise.all([
                 </div>
               </header>
 
+              {item.outOfRange && (
+                <div class="advisory">
+                  <h3>
+                    {item.outOfRange.matchesInstead
+                      ? `Serial belongs to the ${item.outOfRange.matchesInstead} range`
+                      : 'Serial outside the recorded range'}
+                  </h3>
+                  <p>
+                    <b class="mono">
+                      {item.outOfRange.prefix} {item.outOfRange.serial.toLocaleString('en-US')}
+                    </b>{' '}
+                    sits outside the range recorded for the model claimed
+                    {' ('}
+                    <span class="mono">{item.outOfRange.known.join(', ')}</span>
+                    {')'}
+                    {item.outOfRange.matchesInstead
+                      ? ` — it falls inside the ${item.outOfRange.matchesInstead} range instead. Check the model against the plate before approving.`
+                      : '.'}
+                  </p>
+                  <p>
+                    Advisory only. Most of our ranges rest on a single club compilation, and a
+                    number nobody wrote down is a finding rather than an error. This does not
+                    block approval.
+                  </p>
+                </div>
+              )}
+
               {(item.submitterName || item.submitterEmail || item.submitterNote) && (
                 <div class="submitter">
                   <h3>From</h3>
@@ -347,6 +374,33 @@ const [pending, counts, recent] = await Promise.all([
     text-transform: uppercase;
     color: var(--ink-mute);
     margin: 0;
+  }
+
+  /* Advisory, not an error state — amber-ish rather than red, so it reads as
+     "look at this" and not "this is rejected". */
+  .advisory {
+    margin: 18px 0;
+    padding: 14px 16px;
+    border-left: 3px solid var(--brass, #a8894a);
+    background: rgba(168, 137, 74, 0.08);
+    border-radius: 0 3px 3px 0;
+  }
+
+  .advisory h3 {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mute);
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+
+  .advisory p {
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
   }
 
   .submitter {

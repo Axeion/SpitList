@@ -2,30 +2,39 @@
 import Base from '../../layouts/Base.astro';
 import { decodeNumber } from '../../lib/decode';
 import { db } from '../../lib/db';
-import { findCarIdByChassis } from '../../lib/registry';
+import { findCarIdByChassis, resolveSerial, type RangeLookup } from '../../lib/registry';
 
 /**
  * Live decoder. Plain GET form — no JavaScript, shareable result URLs.
  *
  * Everything it reports comes from the number's structure or from this
  * project's own reference data. Nothing is inferred from a table we cannot
- * stand behind.
+ * stand behind — and where a range rests on a single club compilation, the page
+ * says which one rather than presenting it as settled.
  */
 const raw = Astro.url.searchParams.get('number')?.trim() ?? '';
 const decoded = raw ? decodeNumber(raw) : null;
 
 let seriesMatches: { label: string; market: string; yearFrom: number | null; yearTo: number | null }[] = [];
 let registered: { publicRef: string } | null = null;
+let ranges: RangeLookup = { matches: [], hasRangesForPrefix: false };
+
+// Copied so the page can append its own, database-dependent, caveats without
+// mutating what decodeNumber returned.
+const unknowns: string[] = decoded && decoded.format !== 'unrecognised' ? [...decoded.unknowns] : [];
 
 if (decoded && decoded.format !== 'unrecognised') {
-  const [rows, existing] = await Promise.all([
+  const seriesPrefix = decoded.format === 'vin' ? 'VIN' : decoded.prefix;
+
+  const [rows, existing, lookup] = await Promise.all([
     db()`
       select s.label, s.market, s.year_from, s.year_to
       from chassis_series s
-      where s.prefix = ${decoded.format === 'vin' ? 'VIN' : decoded.prefix}
+      where s.prefix = ${seriesPrefix}
       order by s.ordinal
     `,
     findCarIdByChassis(decoded.normalized),
+    resolveSerial(seriesPrefix, decoded.serial),
   ]);
 
   seriesMatches = rows.map((r) => ({
@@ -35,6 +44,27 @@ if (decoded && decoded.format !== 'unrecognised') {
     yearTo: r.year_to === null ? null : Number(r.year_to),
   }));
   registered = existing ? { publicRef: existing.publicRef } : null;
+  ranges = lookup;
+
+  if (!ranges.hasRangesForPrefix) {
+    unknowns.push(
+      decoded.format === 'vin'
+        ? 'No VIN sequence ranges are on record, so the build sequence cannot place this car within its model run.'
+        : `No serial ranges are on record for the prefix "${seriesPrefix}", so the number cannot place this car within its model run.`
+    );
+  } else if (ranges.matches.every((m) => m.modelYear === null)) {
+    unknowns.push(
+      'The ranges we hold identify a model, not a model year. Dating a car to the year needs the build record.'
+    );
+  }
+}
+
+/** Ranges are open-ended where the sources give a first number but no last. */
+function rangeText(m: { serialFrom: number; serialTo: number | null }): string {
+  const from = m.serialFrom.toLocaleString('en-US');
+  return m.serialTo === null
+    ? `${from} onwards`
+    : `${from}–${m.serialTo.toLocaleString('en-US')}`;
 }
 
 const MARKET_LABELS: Record<string, string> = {
@@ -109,6 +139,63 @@ const MARKET_LABELS: Record<string, string> = {
                   ))}
                 </dl>
 
+                {ranges.matches.length > 0 && (
+                  <div class="ranges">
+                    <h3>
+                      {ranges.matches.length === 1
+                        ? 'Serial falls in'
+                        : 'Serial falls in more than one recorded range'}
+                    </h3>
+                    <ul>
+                      {ranges.matches.map((m) => (
+                        <li class={m.verified ? 'is-verified' : ''}>
+                          <div class="range-head">
+                            <b>{m.eraName}</b>
+                            <span class="mono range-nums">
+                              {decoded.format === 'vin' ? 'VIN' : decoded.prefix} {rangeText(m)}
+                            </span>
+                          </div>
+                          {m.modelYear && <p class="range-year">Model year {m.modelYear}</p>}
+                          {m.note && <p class="range-note">{m.note}</p>}
+                          <p class="range-src">
+                            {m.verified ? 'Two sources agree' : 'One source, unconfirmed'} ·{' '}
+                            {m.sourceUrl ? (
+                              <a href={m.sourceUrl} rel="nofollow noopener">
+                                {m.source}
+                              </a>
+                            ) : (
+                              m.source
+                            )}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                    {ranges.matches.length > 1 && (
+                      <p class="series-note">
+                        The number alone cannot separate these. The build record can.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {ranges.matches.length === 0 && ranges.hasRangesForPrefix && (
+                  <div class="ranges">
+                    <h3>Serial falls outside every recorded range</h3>
+                    <p class="series-note">
+                      We hold ranges for this prefix and{' '}
+                      <b class="mono">{decoded.serial.toLocaleString('en-US')}</b> is not inside
+                      any of them. That does not mean the number is wrong. Most of our ranges
+                      come from a single club compilation, the factory sequences have gaps that
+                      were only partly recorded, and a number nobody wrote down is exactly the
+                      kind of thing this registry exists to catch.
+                    </p>
+                    <p class="series-note">
+                      If it is on your car's plate, <a href="/submit">submit it</a> — an
+                      out-of-range number is worth more to the record than a tidy one.
+                    </p>
+                  </div>
+                )}
+
                 {seriesMatches.length > 0 && (
                   <div class="series">
                     <h3>
@@ -129,8 +216,8 @@ const MARKET_LABELS: Record<string, string> = {
                     </ul>
                     {seriesMatches.length > 1 && (
                       <p class="series-note">
-                        The prefix alone cannot separate these — the serial can, once
-                        those ranges are sourced.
+                        The prefix alone cannot separate these. Where ranges are on record,
+                        the serial does — see above.
                       </p>
                     )}
                   </div>
@@ -160,11 +247,11 @@ const MARKET_LABELS: Record<string, string> = {
                   )}
                 </div>
 
-                {decoded.unknowns.length > 0 && (
+                {unknowns.length > 0 && (
                   <div class="card unknowns">
                     <h3>What this can't tell you</h3>
                     <ul>
-                      {decoded.unknowns.map((u) => (
+                      {unknowns.map((u) => (
                         <li>{u}</li>
                       ))}
                     </ul>
@@ -324,11 +411,66 @@ const MARKET_LABELS: Record<string, string> = {
     font-style: italic;
   }
 
-  .series {
+  .series,
+  .ranges {
     margin-top: 24px;
   }
 
+  .ranges ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .ranges li {
+    padding: 12px 0 12px 14px;
+    border-left: 2px solid var(--line);
+    margin-bottom: 10px;
+  }
+
+  /* Corroborated by two sources. The unverified ones are not hidden or
+     apologised for — they just don't get the mark. */
+  .ranges li.is-verified {
+    border-left-color: var(--racing-green-3, var(--signal-red));
+  }
+
+  .range-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+
+  .range-head b {
+    font-size: 16px;
+  }
+
+  .range-nums {
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--ink-mute);
+  }
+
+  .range-year {
+    font-size: 14px;
+    margin: 4px 0 0;
+  }
+
+  .range-note,
+  .range-src {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-mute);
+    margin: 5px 0 0;
+  }
+
+  .range-src a {
+    color: inherit;
+  }
+
   .series h3,
+  .ranges h3,
   .side h3 {
     font-family: var(--font-mono);
     font-size: 10px;

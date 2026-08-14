@@ -103,6 +103,87 @@ export async function getSeriesNotes(eraCode = '1500'): Promise<SeriesNote[]> {
   }));
 }
 
+export interface RangeMatch {
+  seriesId: string;
+  seriesLabel: string;
+  seriesMarket: string;
+  eraCode: string;
+  eraLabel: string;
+  eraName: string;
+  serialFrom: number;
+  /** Null where the source gives an opening number but no close. */
+  serialTo: number | null;
+  modelYear: number | null;
+  note: string | null;
+  verified: boolean;
+  source: string;
+  sourceUrl: string | null;
+}
+
+export interface RangeLookup {
+  /** Ranges containing the serial. Empty is a meaningful answer, not a failure. */
+  matches: RangeMatch[];
+  /**
+   * True when the prefix has ranges on record but none contain this serial —
+   * the number sits in a gap, or past the end. Distinguishes "we looked and it
+   * isn't there" from "we have nothing to look in".
+   */
+  hasRangesForPrefix: boolean;
+}
+
+/**
+ * Which series and era a commission serial falls into.
+ *
+ * Returns every match rather than picking one: a prefix can legitimately span
+ * two eras (FH runs from the MkIV straight through the 1500), and the caller
+ * has to show that rather than guess. Ordered so a verified match is offered
+ * before an unverified one.
+ *
+ * Kept here rather than in decode.ts, which takes no database and shouldn't
+ * start.
+ */
+export async function resolveSerial(prefix: string, serial: number): Promise<RangeLookup> {
+  const sql = db();
+  const p = prefix.trim().toUpperCase();
+  if (!p || !Number.isInteger(serial) || serial < 0) {
+    return { matches: [], hasRangesForPrefix: false };
+  }
+
+  const rows = await sql`
+    select r.series_id, s.label as series_label, s.market as series_market,
+           s.era_code, e.short_label as era_label, e.name as era_name,
+           r.serial_from, r.serial_to, r.model_year, r.note,
+           r.verified, r.source, r.source_url,
+           ${serial} between r.serial_from and coalesce(r.serial_to, 2147483647) as hit
+    from chassis_ranges r
+    join chassis_series s on s.id = r.series_id
+    join model_eras e on e.code = s.era_code
+    where s.prefix = ${p}
+    order by r.verified desc, e.ordinal, r.serial_from
+  `;
+
+  return {
+    hasRangesForPrefix: rows.length > 0,
+    matches: rows
+      .filter((r) => r.hit)
+      .map((r) => ({
+        seriesId: r.series_id,
+        seriesLabel: r.series_label,
+        seriesMarket: r.series_market,
+        eraCode: r.era_code,
+        eraLabel: r.era_label,
+        eraName: r.era_name,
+        serialFrom: num(r.serial_from),
+        serialTo: r.serial_to === null ? null : num(r.serial_to),
+        modelYear: r.model_year === null ? null : num(r.model_year),
+        note: r.note,
+        verified: r.verified,
+        source: r.source,
+        sourceUrl: r.source_url,
+      })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Registry browse / search
 //

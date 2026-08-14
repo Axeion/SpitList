@@ -7,7 +7,11 @@
 -- Idempotent: safe to re-run.
 
 insert into model_eras (code, ordinal, name, short_label, year_from, year_to, units_built, engine_cc, blurb) values
-  ('mk1',  1, 'Spitfire 4',      'Mk1',  1962, 1965,  45753, 1147,
+  -- 45,573, not 45,753. The transposition was in our seed, not the sources:
+  -- both docs/sources/iw-models-options.md and docs/sources/amicale-serials.md
+  -- give 45,573 independently. Every share-of-production figure on the site
+  -- divides by this number.
+  ('mk1',  1, 'Spitfire 4',      'Mk1',  1962, 1965,  45573, 1147,
    'Michelotti''s body over the Herald frame, drivetrain and independent suspension. Roll-up windows in a class that mostly did not have them.'),
   ('mk2',  2, 'Spitfire 4 Mk2',  'Mk2',  1965, 1967,  37409, 1147,
    'Same silhouette and the same 1,147cc four, with a warmer camshaft and a tidier interior.'),
@@ -27,9 +31,9 @@ on conflict (code) do update set
   engine_cc   = excluded.engine_cc,
   blurb       = excluded.blurb;
 
--- Commission-number series. serial_from / serial_to are left null on purpose:
--- see docs/data-model.md. Publishing a range implies we can stand behind it,
--- and these need sourcing from BMH build records first.
+-- Commission-number series. serial_from / serial_to on this table are dead —
+-- ranges live in chassis_ranges (migration 0007) so they can be non-contiguous
+-- and carry their own provenance. See db/seed/0002_chassis_ranges.sql.
 insert into chassis_series (id, prefix, era_code, ordinal, label, market, year_from, year_to, notes) values
   ('fc-mk1',   'FC',  'mk1',  1, 'FC series — Mk1',            'worldwide',      1962, 1965,
    'Opening commission sequence, carried straight through into the Mk2.'),
@@ -44,7 +48,21 @@ insert into chassis_series (id, prefix, era_code, ordinal, label, market, year_f
   ('fh-1500',  'FH',  '1500', 6, 'FH series — 1500, rest of world', 'rest-of-world', 1975, 1980,
    'Continues the numbering Triumph started with the MkIV. Used on every pre-VIN 1500 outside North America.'),
   ('vin-1500', 'VIN', '1500', 7, 'VIN series — 1979–81',       'worldwide',      1979, 1981,
-   'Cars built under the modern VIN system, in serial order — model-year labels do not always track cleanly with the sequence.')
+   'Cars built under the modern VIN system, in serial order — model-year labels do not always track cleanly with the sequence.'),
+
+  -- Market-specific prefixes. These were missing from the first pass, which is
+  -- why the decoder reported them as unrecognised and why era inference on
+  -- import could not place them.
+  ('fdu-mk3',  'FDU', 'mk3',  8, 'FDU series — Mk3, North America', 'north-america', 1967, 1970,
+   'US-market Mk3s carry the FDU prefix rather than plain FD.'),
+  ('7fd-mk3',  '7FD', 'mk3',  9, '7FD series — Mk3, Canada',        'north-america', 1967, 1970,
+   'Seen on some Canadian-market Mk3s.'),
+  ('fk-mk4',   'FK',  'mk4', 10, 'FK series — MkIV, North America', 'north-america', 1971, 1974,
+   'US-market MkIVs kept the 1,296cc engine under the FK prefix while FM cars had already moved to the 1500.'),
+  ('fl-mk4',   'FL',  'mk4', 11, 'FL series — MkIV, Sweden',        'rest-of-world', 1971, 1974,
+   'Swedish-market cars.'),
+  ('1fm-1500', '1FM', '1500', 12, '1FM series — 1500, Senneffe',    'north-america', 1974, 1975,
+   'A small number of North-America-bound cars assembled at Senneffe in Belgium.')
 on conflict (id) do update set
   prefix    = excluded.prefix,
   era_code  = excluded.era_code,

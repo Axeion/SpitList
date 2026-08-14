@@ -12,22 +12,39 @@
  * No owner names are generated — the seed sets locations and visibility flags
  * only, so no invented person ever appears in the registry.
  */
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { connect, explainConnectionError } from './_client.mjs';
 
 const TOTAL_BY_ERA = { mk1: 24, mk2: 21, mk3: 34, mk4: 31, 1500: 76 };
 
-// Placeholder serial bands. These are NOT sourced factory ranges — see
-// docs/data-model.md. They exist only to make synthetic numbers look plausible.
+// Bands the synthetic numbers are drawn from. Each series gets one or more
+// blocks; a block is picked at random, then a number inside it.
+//
+// These now track the sourced ranges in db/seed/0002_chassis_ranges.sql. They
+// did not before, which was harmless while nothing checked a serial against a
+// range — now that the review queue flags out-of-range submissions, a
+// placeholder set that sat outside every known range would light up the flag on
+// every dev machine and teach reviewers to ignore it.
+//
+// The Mk3 blocks are the real gapped sequence, so seeded Mk3s never land in
+// FD15307–FD19999 or FD51968–FD74999.
 const SERIAL_BANDS = {
-  'fc-mk1': [1, 44500],
-  'fc-mk2': [50001, 94800],
-  'fd-mk3': [1, 51200],
-  'fh-mk4': [3, 64900],
-  'fm-1500': [1, 58000],
-  'fh-1500': [65000, 130000],
-  'vin-1500': [400001, 416000],
+  'fc-mk1': [[1, 44656]],
+  'fc-mk2': [[50001, 88912]],
+  'fd-mk3': [[1, 15306], [20000, 51967], [75000, 92803]],
+  'fh-mk4': [[1, 64995]],
+  // Open-ended in the sources; the ceilings here are synthetic-data limits, not
+  // claims about the last car built.
+  'fm-1500': [[28001, 110000]],
+  'fh-1500': [[75001, 130000]],
+  'vin-1500': [[400001, 416000]],
 };
+
+// VIN-era cars: TF + market letter + DW + steering/overdrive digit + model-year
+// pair. Drawn from docs/sources/amicale-serials.md so the seeded numbers parse
+// through src/lib/decode.ts instead of failing its VIN pattern.
+const VIN_PREFIXES = ['TFADW', 'TFADW', 'TFVDW', 'TFZDW', 'TFLDW'];
+const VIN_DIGITS = ['1', '2', '2', '5', '6'];
 
 const SERIES_BY_ERA = {
   mk1: ['fc-mk1'],
@@ -95,8 +112,13 @@ function pickWeighted(rows) {
 const sql = connect();
 
 try {
-  console.log('Seeding reference data...');
-  await sql.unsafe(await readFile('db/seed/0001_reference.sql', 'utf8'));
+  // Every file in db/seed, in name order. Listing them by hand is how
+  // 0002_chassis_ranges.sql came to exist without ever being applied.
+  const seedFiles = (await readdir('db/seed')).filter((f) => f.endsWith('.sql')).sort();
+  for (const file of seedFiles) {
+    console.log(`Seeding ${file}...`);
+    await sql.unsafe(await readFile(`db/seed/${file}`, 'utf8'));
+  }
 
   const eras = Object.fromEntries(
     (await sql`select code, year_from, year_to, engine_cc from model_eras`).map((e) => [e.code, e])
@@ -109,6 +131,7 @@ try {
   if (removed.length) console.log(`Cleared ${removed.length} previous placeholder car(s).`);
 
   const rows = [];
+  const taken = new Set();
   let n = 0;
 
   for (const [eraCode, count] of Object.entries(TOTAL_BY_ERA)) {
@@ -116,15 +139,23 @@ try {
     for (let i = 0; i < count; i++) {
       const seriesId = pick(SERIES_BY_ERA[eraCode]);
       const series = seriesYears[seriesId];
-      const [lo, hi] = SERIAL_BANDS[seriesId];
-      const serial = int(lo, hi);
-
       const isVin = series.prefix === 'VIN';
-      const suffix = isVin ? null : pick(['L', 'L', 'LO', 'O', null, null]);
       const prefix = series.prefix;
-      const number = isVin
-        ? `TFADW${serial}`
-        : `${prefix}${serial}${suffix ?? ''}`;
+
+      // chassis_normalized is unique, and the bands are narrow enough that two
+      // draws can collide. Redraw rather than let the insert fail.
+      let serial;
+      let suffix;
+      let number;
+      do {
+        const [lo, hi] = pick(SERIAL_BANDS[seriesId]);
+        serial = int(lo, hi);
+        suffix = isVin ? null : pick(['L', 'L', 'LO', 'O', null, null]);
+        number = isVin
+          ? `${pick(VIN_PREFIXES)}${pick(VIN_DIGITS)}AT${serial}`
+          : `${prefix}${serial}${suffix ?? ''}`;
+      } while (taken.has(number.toUpperCase()));
+      taken.add(number.toUpperCase());
 
       const yearFrom = series.year_from ?? era.year_from;
       const yearTo = series.year_to ?? era.year_to;

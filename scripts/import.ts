@@ -120,6 +120,47 @@ async function runImport() {
   // Reference data for era resolution and validation.
   const eras = await sql`select code from model_eras order by ordinal`;
   const series = await sql`select id, prefix, era_code from chassis_series`;
+
+  // Ranges, loaded once and checked in memory. A roster of a few thousand rows
+  // against a handful of ranges does not need a query per row.
+  const rangeRows = await sql`
+    select s.prefix, s.era_code, r.serial_from, r.serial_to
+    from chassis_ranges r
+    join chassis_series s on s.id = r.series_id
+  `;
+  type Range = { from: number; to: number | null; eraCode: string };
+  const rangesByPrefix = new Map<string, Range[]>();
+  for (const r of rangeRows) {
+    const list = rangesByPrefix.get(r.prefix as string) ?? [];
+    list.push({
+      from: Number(r.serial_from),
+      to: r.serial_to === null ? null : Number(r.serial_to),
+      eraCode: r.era_code as string,
+    });
+    rangesByPrefix.set(r.prefix as string, list);
+  }
+
+  /**
+   * Advisory only — never a problem, never a reason to skip a row.
+   *
+   * Checked against the model the row claims, not just the prefix: FH runs from
+   * the MkIV into the 1500, so a MkIV number filed as a 1500 is inside a real FH
+   * range and still wrong. That mismatch, repeated down a file, is what a
+   * mangled model column looks like — which is the case worth catching before
+   * a few thousand rows go into the queue.
+   *
+   * One or two out-of-range cars in a thousand is the normal state of a
+   * forty-year-old record and means nothing.
+   */
+  function outOfRange(prefix: string | null, serial: number | null, eraCode: string): boolean {
+    if (!prefix || serial === null) return false;
+    const list = rangesByPrefix.get(prefix.toUpperCase());
+    if (!list?.length) return false;
+    const forEra = list.filter((r) => r.eraCode === eraCode);
+    if (!forEra.length) return false;
+    return !forEra.some((r) => serial >= r.from && (r.to === null || serial <= r.to));
+  }
+
   const eraCodes = eras.map((e) => e.code as string);
   const seriesByEra: Record<string, string[]> = {};
   const seriesByPrefix = new Map<string, string[]>();
@@ -135,7 +176,13 @@ async function runImport() {
 
   const problems: string[] = [];
   const seen = new Map<string, number>();
-  const prepared: { line: number; form: FormData; normalized: string; chassis: string }[] = [];
+  const prepared: {
+    line: number;
+    form: FormData;
+    normalized: string;
+    chassis: string;
+    outOfRange: boolean;
+  }[] = [];
 
   for (const [index, row] of rows.slice(0, limit).entries()) {
     const line = index + 2; // 1-based, plus the header row
@@ -176,7 +223,17 @@ async function runImport() {
       continue;
     }
     seen.set(normalized, line);
-    prepared.push({ line, form, normalized, chassis });
+    prepared.push({
+      line,
+      form,
+      normalized,
+      chassis,
+      outOfRange: outOfRange(
+        result.payload.chassisPrefix,
+        result.payload.chassisSerial,
+        result.payload.eraCode
+      ),
+    });
   }
 
   // Which of these already exist? One query, not one per row.
@@ -198,6 +255,24 @@ async function runImport() {
   console.log(`  new cars        ${creates.length}`);
   console.log(`  corrections     ${updates.length}  ${dim('(chassis already registered)')}`);
   console.log(`  problems        ${problems.length}`);
+
+  const flagged = prepared.filter((p) => p.outOfRange);
+  if (flagged.length) {
+    const pct = Math.round((flagged.length / prepared.length) * 100);
+    console.log(
+      `  out of range    ${flagged.length}  ${dim(`(${pct}% — advisory, these still import)`)}`
+    );
+    console.log(`\n${bold('Out of range')} ${dim(`(first ${Math.min(flagged.length, 10)})`)}`);
+    for (const p of flagged.slice(0, 10)) {
+      console.log(`  line ${p.line}: ${p.chassis}`);
+    }
+    if (flagged.length > 10) console.log(`  ${dim(`... and ${flagged.length - 10} more`)}`);
+    if (pct >= 25) {
+      console.log(
+        `  ${dim('a quarter or more of the file is out of range — check the column mapping before committing')}`
+      );
+    }
+  }
 
   if (problems.length) {
     console.log(`\n${bold('Problems')} ${dim(`(first ${Math.min(problems.length, 20)})`)}`);
