@@ -7,13 +7,27 @@ import { createSubmission, recentSubmissionCount } from '../../lib/submissions';
 import { notifyNewSubmission } from '../../lib/notify';
 import { clientIp } from '../../lib/request';
 import { findClub } from '../../data/clubs';
+import { SITE } from '../../lib/site';
 
 const MAX_PER_HOUR = 5;
 
 let errors: Record<string, string> = {};
 let values: Record<string, string> = {};
 
-if (Astro.request.method === 'POST') {
+// Loaded once and shared with the POST branch. The model and series dropdowns
+// are built from it, and so is the list of era codes the submission is checked
+// against — if it is empty the form cannot be completed or accepted, so the
+// page says so instead of rendering a dropdown with nothing in it.
+const options = await getFilterOptions();
+const referenceReady = options.eras.length > 0;
+
+if (!referenceReady) {
+  console.error(
+    '[submit] model_eras is empty — reference data has not been applied to this database.'
+  );
+}
+
+if (referenceReady && Astro.request.method === 'POST') {
   const form = await Astro.request.formData();
 
   // Honeypot. Accept the request, discard it, and say thank you — telling a bot
@@ -30,7 +44,6 @@ if (Astro.request.method === 'POST') {
       _form: `That's ${MAX_PER_HOUR} submissions in an hour from this connection. Give it a little while, or email us if you have a batch to add.`,
     };
   } else {
-    const options = await getFilterOptions();
     const seriesByEra: Record<string, string[]> = {};
     for (const series of options.series) {
       (seriesByEra[series.eraCode] ??= []).push(series.id);
@@ -69,7 +82,6 @@ if (Astro.request.method === 'POST') {
   }
 }
 
-const options = await getFilterOptions();
 const prefillChassis = Astro.url.searchParams.get('chassis') ?? '';
 
 // Survives a validation error, because the hidden field is echoed back in
@@ -101,13 +113,31 @@ const club = findClub(values.club ?? Astro.url.searchParams.get('club'));
           </div>
         )
       }
-      <SubmitForm
-        options={options}
-        errors={errors}
-        values={values}
-        prefillChassis={prefillChassis}
-        club={club}
-      />
+      {
+        referenceReady ? (
+          <SubmitForm
+            options={options}
+            errors={errors}
+            values={values}
+            prefillChassis={prefillChassis}
+            club={club}
+          />
+        ) : (
+          <div class="unavailable" role="alert">
+            <h2>The form is temporarily out of action.</h2>
+            <p>
+              This one is on us, not on you or your car — the reference data the
+              form is built from isn't loading, so the model list is empty and
+              there is nothing to submit against. We can see it and we're on it.
+            </p>
+            <p>
+              Please try again shortly. If you'd rather not retype anything, mail
+              the details to <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a> and
+              we'll enter the car ourselves.
+            </p>
+          </div>
+        )
+      }
     </div>
   </section>
 </Base>
@@ -139,6 +169,33 @@ const club = findClub(values.club ?? Astro.url.searchParams.get('club'));
 
   .submit-body {
     padding: 48px 0 88px;
+  }
+
+  .unavailable {
+    max-width: 780px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--signal-red);
+    background: var(--card);
+    border-radius: 3px;
+    padding: 24px 26px;
+  }
+
+  .unavailable h2 {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    font-size: 22px;
+    margin: 0 0 12px;
+  }
+
+  .unavailable p {
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    margin: 0 0 12px;
+  }
+
+  .unavailable p:last-child {
+    margin-bottom: 0;
   }
 
   .rate-limit {

@@ -93,6 +93,12 @@ Two things this pins down:
   that nothing was allowed to fill. Splitting them is what lets schema and the
   data that gives it meaning ship together.
 
+- **The healthcheck counts reference rows, not just `select 1`.** A database with
+  the schema and no `model_eras` serves every page with a 200 while `/submit` is
+  unusable — the model dropdown is built from that table. Gating the deploy on
+  data the site cannot function without is the only version of "healthy" worth
+  having here.
+
 Managed Postgres also settles the Neon question — no reason to add a second
 provider for a database this small.
 

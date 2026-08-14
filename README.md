@@ -43,7 +43,7 @@ worse than one that visibly fails.
 | `/admin/login` | Google sign-in for moderators. |
 | `/admin/submissions` | Moderation queue. Signed-in moderators only. |
 | `/api/submissions/:id` | Moderation callback for n8n. Bearer auth. |
-| `/health` | DB ping. 200 `ok` / 503 `degraded`. |
+| `/health` | Database *and* reference data. 200 `ok` / 503 `degraded`. |
 
 ## Submission and moderation flow
 
@@ -269,9 +269,19 @@ One multi-stage `Dockerfile` serves both supported targets. It ships `db/` and
 `scripts/` into the runtime image, so migrations can be run against the deployed
 version either way.
 
-`GET /health` pings the database and returns 200 (`ok`) or 503 (`degraded`).
-It's the healthcheck for both paths — a healthy response means "can serve real
-data", not just "process is up".
+`GET /health` returns 200 (`ok`) or 503 (`degraded`), and is the healthcheck for
+both paths. A healthy response means "can serve real data", not just "process is
+up", so it checks two things and reports both:
+
+```json
+{"status":"ok","database":"up","reference":"ok","eras":5,"series":12}
+```
+
+`"reference":"missing"` with `"eras":0` is a 503: the schema is there but
+`db:reference` never ran against this database. That combination used to pass —
+every page returned 200 while the model dropdown on `/submit` was empty and no
+car could be submitted at all. Counting the rows is what makes that state
+visible instead of silent.
 
 ### Railway (current target)
 
@@ -307,8 +317,11 @@ every deploy.
 - **Pre-deploy / migrate stage** — almost always `DATABASE_URL`. The script
   prints what's wrong and what to set; check the deploy logs rather than
   guessing.
-- **Healthcheck stage** — the app booted but `/health` returned 503, which means
-  it reached the container and not the database. Same variable, same fix.
+- **Healthcheck stage** — the app booted but `/health` returned 503. Read the
+  body: `"database":"down"` is the variable above, same fix. `"reference":
+  "missing"` is different — the database is reachable but empty of reference
+  data, so the pre-deploy step didn't run `db:reference`. Check that
+  `preDeployCommand` in `railway.json` is `npm run db:deploy`, not `db:migrate`.
 - **Build stage** — a real build error; the logs will name the file.
 
 `railway.json` handles the rest: Dockerfile builder, healthcheck on `/health`,
