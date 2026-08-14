@@ -328,11 +328,21 @@ every deploy.
 and `npm run db:deploy` as a pre-deploy step so schema and reference data land
 before the new version takes traffic. Railway injects `PORT` and terminates TLS.
 
-Two things worth knowing before changing them:
+Three things worth knowing before changing them:
 
 - The image is **Debian-slim, not Alpine**, deliberately. Railway's private
   networking is IPv6-only and musl-based images need an extra opt-in flag to
   resolve `*.railway.internal`.
+- **`security.allowedDomains` in `astro.config.mjs` is what makes form POSTs
+  work behind the proxy**, and it is not optional. Railway terminates TLS at the
+  edge and speaks plain HTTP to the container, so Astro sees `http` while the
+  browser's `Origin` header says `https`; its CSRF check compares the two and
+  answers `Cross-site POST form submissions are forbidden` to every form on the
+  site. Listing the domains this site is served on lets Astro trust the
+  `X-Forwarded-*` headers and reconstruct the real origin. **Add a new custom
+  domain here when you add one**, or its forms will 403 while the old domain's
+  keep working. Do not reach for `security.checkOrigin: false` instead — that
+  disables the protection against real cross-site posts too.
 - **`db:seed` must never run against production** — it generates synthetic
   cars. The deploy runs `db:deploy` (migrate + `db:reference`), which applies
   `db/seed/*.sql` and stops there.
